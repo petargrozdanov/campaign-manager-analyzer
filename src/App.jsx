@@ -40,7 +40,9 @@ import {
   Minus,
   RotateCcw,
   ListChecks,
-  X
+  X,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import './index.css';
 
@@ -682,6 +684,12 @@ function App() {
   const [snapshotNameInput, setSnapshotNameInput] = useState('');
   const [savedSuccessMsg, setSavedSuccessMsg] = useState(false);
   const [copiedActionMsg, setCopiedActionMsg] = useState(false);
+
+  // Feedback Modal State
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackType, setFeedbackType] = useState('ui');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
   // ASIN Catalog Memory (Product Names, Custom Strategies, etc.)
   const [asinCatalog, setAsinCatalog] = useState(() => {
@@ -1758,6 +1766,14 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
           >
             <ListChecks size={18} />
             Bulk Operations
+          </button>
+          <button 
+            className="tab-btn"
+            onClick={() => setIsFeedbackOpen(true)}
+            style={{ marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}
+          >
+            <MessageSquare size={18} />
+            Feedback & Support
           </button>
         </div>
         
@@ -3282,6 +3298,85 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                 <button className="close-action-btn" onClick={() => setEditingCatalogAsin(null)}>
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* MODAL: FEEDBACK */}
+        {isFeedbackOpen && (
+          <div className="modal-overlay" onClick={() => { setIsFeedbackOpen(false); setFeedbackSubmitted(false); setFeedbackText(''); }}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+              <div className="modal-header">
+                <h3>Submit Feedback</h3>
+                <button className="close-btn" onClick={() => { setIsFeedbackOpen(false); setFeedbackSubmitted(false); setFeedbackText(''); }}>
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="modal-body" style={{ padding: '1.5rem' }}>
+                {feedbackSubmitted ? (
+                  <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+                    <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 1rem' }} />
+                    <h4>Thank you for your feedback!</h4>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                      Your input helps us improve the Campaign Manager Analyzer.
+                    </p>
+                    <button 
+                      className="save-btn" 
+                      style={{ marginTop: '1.5rem' }}
+                      onClick={() => { setIsFeedbackOpen(false); setFeedbackSubmitted(false); setFeedbackText(''); }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="form-group" style={{ marginBottom: '1.2rem' }}>
+                      <label>Feedback Category</label>
+                      <select 
+                        className="form-control"
+                        value={feedbackType}
+                        onChange={(e) => setFeedbackType(e.target.value)}
+                      >
+                        <option value="ui">🎨 UI / UX Enhancement</option>
+                        <option value="bug">🐛 Bug Report</option>
+                        <option value="perf">⚡ Performance Issue</option>
+                        <option value="feature">💡 Feature Request</option>
+                        <option value="other">📝 Other</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Description</label>
+                      <textarea 
+                        className="form-control" 
+                        rows={5}
+                        placeholder="Please describe your feedback in detail..."
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        style={{ resize: 'vertical' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                      <button 
+                        className="cancel-btn"
+                        onClick={() => setIsFeedbackOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        className="save-btn"
+                        onClick={() => {
+                          if (feedbackText.trim()) {
+                            // In a real app, send to API here
+                            setFeedbackSubmitted(true);
+                          }
+                        }}
+                        disabled={!feedbackText.trim()}
+                      >
+                        <Send size={16} /> Submit Feedback
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
