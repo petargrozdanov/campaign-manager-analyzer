@@ -2019,3 +2019,148 @@ body {
 .mode-defense { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
 .mode-profitability { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
 .mode-custom { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+/* ========================================
+   FEEDBACK BADGE (sidebar notification dot)
+   ======================================== */
+.feedback-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: auto;
+  line-height: 1;
+}
+
+/* ========================================
+   ADMIN PANEL — AUTO-IMPLEMENT BANNER
+   ======================================== */
+.admin-auto-implement-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-left: 4px solid var(--warning);
+  border-radius: 10px;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.auto-implement-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex: 1;
+}
+
+.auto-implement-count {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--warning);
+  line-height: 1;
+  min-width: 40px;
+}
+
+.auto-implement-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.4rem;
+}
+
+.auto-implement-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.auto-implement-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.auto-implement-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ========================================
+   ADMIN PANEL — CLUSTER CARD (2 reports)
+   ======================================== */
+.admin-cluster-card {
+  padding: 0.85rem 1.1rem;
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-left: 3px solid var(--accent-color);
+  border-radius: 8px;
+  margin-bottom: 0.6rem;
+}
+
+.cluster-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 5px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ========================================
+   ADMIN PANEL — KEYWORD PILLS
+   ======================================== */
+.keyword-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.keyword-pill-sm {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+}
+
+/* ========================================
+   ADMIN PANEL — RESOLVED ROW STATE
+   ======================================== */
+.admin-row-resolved {
+  opacity: 0.45;
+}
+
+.admin-text-resolved {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}

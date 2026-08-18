@@ -49,6 +49,17 @@ import './index.css';
 const SNAPSHOTS_STORAGE_KEY = 'cm_analyzer_snapshots_v1';
 const CATALOG_STORAGE_KEY = 'cm_analyzer_catalog_v1';
 const STRATEGY_STORAGE_KEY = 'cm_analyzer_global_strategy_v1';
+const FEEDBACK_STORAGE_KEY = 'cm_feedback_v1';
+
+// Keyword extractor - strips stop words and returns meaningful tokens
+const STOP_WORDS = new Set(['the','is','a','an','and','or','but','in','on','at','to','for','of','with','that','this','it','was','are','be','have','has','had','not','as','by','from','we','they','my','our','i','you','can','do','so','if','its']);
+const extractKeywords = (text) => {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+};
+
 
 // Default Global Strategy Rules
 const DEFAULT_GLOBAL_STRATEGY = {
@@ -690,6 +701,76 @@ function App() {
   const [feedbackType, setFeedbackType] = useState('ui');
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+
+  // Feedback Storage (persisted to localStorage)
+  const [feedbacks, setFeedbacks] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+
+  // Persist feedbacks whenever they change
+  useEffect(() => {
+    try { localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(feedbacks)); } catch {}
+  }, [feedbacks]);
+
+  // Compute unread feedback count (status === 'open')
+  const unreadFeedbackCount = feedbacks.filter(f => f.status === 'open').length;
+
+  // Cluster feedbacks by shared keywords (2+ shared keywords = same cluster)
+  const feedbackClusters = useMemo(() => {
+    const clusters = [];
+    const assigned = new Set();
+    feedbacks.forEach((fb, i) => {
+      if (assigned.has(i)) return;
+      const cluster = [fb];
+      assigned.add(i);
+      feedbacks.forEach((other, j) => {
+        if (i === j || assigned.has(j)) return;
+        const shared = fb.keywords.filter(k => other.keywords.includes(k));
+        if (shared.length >= 2) {
+          cluster.push(other);
+          assigned.add(j);
+        }
+      });
+      if (cluster.length >= 2) {
+        const allKeywords = cluster.flatMap(f => f.keywords);
+        const freq = {};
+        allKeywords.forEach(k => { freq[k] = (freq[k] || 0) + 1; });
+        const topKeywords = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 5).map(e => e[0]);
+        clusters.push({ items: cluster, topKeywords, count: cluster.length });
+      }
+    });
+    return clusters.sort((a, b) => b.count - a.count);
+  }, [feedbacks]);
+
+  // Submit a new feedback entry
+  const submitFeedback = () => {
+    if (!feedbackText.trim()) return;
+    const entry = {
+      id: `fb_${Date.now()}`,
+      type: feedbackType,
+      text: feedbackText.trim(),
+      keywords: extractKeywords(feedbackText),
+      timestamp: new Date().toISOString(),
+      status: 'open'
+    };
+    setFeedbacks(prev => [entry, ...prev]);
+    setFeedbackSubmitted(true);
+  };
+
+  // Mark feedback as resolved / reopen
+  const toggleFeedbackStatus = (id) => {
+    setFeedbacks(prev => prev.map(f => f.id === id ? { ...f, status: f.status === 'open' ? 'resolved' : 'open' } : f));
+  };
+
+  // Delete a single feedback
+  const deleteFeedback = (id) => {
+    setFeedbacks(prev => prev.filter(f => f.id !== id));
+  };
+
+
 
   // ASIN Catalog Memory (Product Names, Custom Strategies, etc.)
   const [asinCatalog, setAsinCatalog] = useState(() => {
@@ -1768,9 +1849,19 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             Bulk Operations
           </button>
           <button 
+            className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+            style={{ marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}
+          >
+            <ShieldCheck size={18} color={activeTab === 'admin' ? 'var(--accent-color)' : undefined} />
+            Admin Panel
+            {unreadFeedbackCount > 0 && (
+              <span className="feedback-badge">{unreadFeedbackCount}</span>
+            )}
+          </button>
+          <button 
             className="tab-btn"
             onClick={() => setIsFeedbackOpen(true)}
-            style={{ marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}
           >
             <MessageSquare size={18} />
             Feedback & Support
@@ -2938,6 +3029,164 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
           </div>
         )}
 
+        {/* TAB 7: ADMIN PANEL */}
+        {activeTab === 'admin' && (() => {
+          const typeLabels = { ui: '🎨 UI/UX', bug: '🐛 Bug', perf: '⚡ Performance', feature: '💡 Feature', other: '📝 Other' };
+          const openItems = feedbacks.filter(f => f.status === 'open');
+          const resolvedItems = feedbacks.filter(f => f.status === 'resolved');
+          return (
+            <div className="dashboard-container">
+              <div className="dashboard-header">
+                <div>
+                  <h1 className="dashboard-title">
+                    <ShieldCheck size={28} color="var(--accent-color)" style={{verticalAlign:'middle',marginRight:'0.5rem'}} />
+                    Admin Panel — Feedback Dashboard
+                  </h1>
+                  <p style={{color:'var(--text-secondary)',fontSize:'0.9rem',marginTop:'0.3rem'}}>
+                    All user feedback is stored locally. Clusters detect repeated issues. Auto-implement triggers at 3+ matching reports.
+                  </p>
+                </div>
+                <div style={{display:'flex',gap:'0.75rem',alignItems:'center'}}>
+                  <span style={{color:'var(--text-secondary)',fontSize:'0.85rem'}}>
+                    {feedbacks.length} total · {openItems.length} open · {resolvedItems.length} resolved
+                  </span>
+                  {feedbacks.length > 0 && (
+                    <button className="strategy-tool-btn reset-btn" onClick={() => { if(window.confirm('Clear ALL feedback? This cannot be undone.')) setFeedbacks([]); }}>
+                      <Trash2 size={14} /> Clear All
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {feedbackClusters.filter(c => c.count >= 3).length > 0 && (
+                <div style={{marginBottom:'1.5rem'}}>
+                  <h3 style={{fontSize:'1rem',marginBottom:'0.75rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                    <Zap size={18} color="var(--warning)" /> Auto-Implement Triggers
+                    <span style={{fontSize:'0.78rem',color:'var(--text-secondary)',fontWeight:400}}>— 3+ users reported the same issue</span>
+                  </h3>
+                  {feedbackClusters.filter(c => c.count >= 3).map((cluster, ci) => (
+                    <div key={ci} className="admin-auto-implement-banner">
+                      <div className="auto-implement-left">
+                        <span className="auto-implement-count">{cluster.count}x</span>
+                        <div>
+                          <div className="auto-implement-title">Common issue: <strong>{cluster.topKeywords.slice(0,3).join(', ')}</strong></div>
+                          <div className="auto-implement-keywords">
+                            {cluster.topKeywords.map((kw,ki) => <span key={ki} className="keyword-pill">{kw}</span>)}
+                          </div>
+                          <div style={{marginTop:'0.4rem',fontSize:'0.8rem',color:'var(--text-secondary)'}}>
+                            "{cluster.items[0].text.slice(0,120)}{cluster.items[0].text.length > 120 ? '...' : ''}"
+                          </div>
+                        </div>
+                      </div>
+                      <div className="auto-implement-actions">
+                        <span className="auto-implement-ready-badge">⚡ Auto-Implement Ready</span>
+                        <button className="strategy-tool-btn apply-all-btn" onClick={() => cluster.items.forEach(item => toggleFeedbackStatus(item.id))}>
+                          <CheckCircle2 size={14} /> Mark All Resolved
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {feedbackClusters.filter(c => c.count === 2).length > 0 && (
+                <div style={{marginBottom:'1.5rem'}}>
+                  <h3 style={{fontSize:'1rem',marginBottom:'0.75rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                    <AlertTriangle size={18} color="var(--warning)" /> Emerging Patterns
+                    <span style={{fontSize:'0.78rem',color:'var(--text-secondary)',fontWeight:400}}>— 1 more report needed to trigger auto-implement</span>
+                  </h3>
+                  {feedbackClusters.filter(c => c.count === 2).map((cluster, ci) => (
+                    <div key={ci} className="admin-cluster-card">
+                      <div style={{display:'flex',alignItems:'center',gap:'0.75rem',flexWrap:'wrap'}}>
+                        <span className="cluster-count-badge">{cluster.count} reports</span>
+                        <div className="auto-implement-keywords">
+                          {cluster.topKeywords.map((kw,ki) => <span key={ki} className="keyword-pill">{kw}</span>)}
+                        </div>
+                      </div>
+                      <div style={{color:'var(--text-secondary)',fontSize:'0.8rem',marginTop:'0.35rem'}}>
+                        "{cluster.items[0].text.slice(0,100)}..."
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 style={{fontSize:'1rem',marginBottom:'0.75rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                <MessageSquare size={18} color="var(--accent-color)" /> Feedback Inbox
+              </h3>
+
+              {feedbacks.length === 0 ? (
+                <div className="empty-state">
+                  <MessageSquare size={48} className="empty-icon" />
+                  <p>No feedback yet. Share the app and responses will appear here.</p>
+                </div>
+              ) : (
+                <div className="campaigns-container">
+                  <table className="campaign-table">
+                    <thead>
+                      <tr>
+                        <th style={{width:'110px'}}>Date</th>
+                        <th style={{width:'120px'}}>Type</th>
+                        <th>Message</th>
+                        <th style={{width:'130px'}}>Keywords</th>
+                        <th style={{width:'100px'}}>Status</th>
+                        <th style={{width:'80px'}}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {feedbacks.map((fb) => (
+                        <tr key={fb.id} className={fb.status === 'resolved' ? 'admin-row-resolved' : ''}>
+                          <td style={{fontSize:'0.78rem',color:'var(--text-secondary)'}}>
+                            {new Date(fb.timestamp).toLocaleDateString()}<br/>
+                            <span style={{fontSize:'0.72rem'}}>{new Date(fb.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                          </td>
+                          <td>
+                            <span className="perf-badge" style={
+                              fb.type === 'bug' ? {background:'rgba(239,68,68,0.15)',color:'#f87171',border:'1px solid rgba(239,68,68,0.3)'} :
+                              fb.type === 'feature' ? {background:'rgba(16,185,129,0.15)',color:'#34d399',border:'1px solid rgba(16,185,129,0.3)'} :
+                              fb.type === 'perf' ? {background:'rgba(245,158,11,0.15)',color:'#fbbf24',border:'1px solid rgba(245,158,11,0.3)'} :
+                              {background:'rgba(59,130,246,0.15)',color:'#60a5fa',border:'1px solid rgba(59,130,246,0.3)'}
+                            }>
+                              {typeLabels[fb.type] || fb.type}
+                            </span>
+                          </td>
+                          <td style={{fontSize:'0.85rem'}}>
+                            <span className={fb.status === 'resolved' ? 'admin-text-resolved' : ''}>{fb.text}</span>
+                          </td>
+                          <td>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:'0.2rem'}}>
+                              {fb.keywords.slice(0,4).map((kw,ki) => <span key={ki} className="keyword-pill keyword-pill-sm">{kw}</span>)}
+                            </div>
+                          </td>
+                          <td>
+                            <span className="perf-badge" style={fb.status === 'resolved'
+                              ? {background:'rgba(16,185,129,0.15)',color:'#34d399',border:'1px solid rgba(16,185,129,0.3)'}
+                              : {background:'rgba(239,68,68,0.15)',color:'#f87171',border:'1px solid rgba(239,68,68,0.3)'}}>
+                              {fb.status === 'resolved' ? '✓ Resolved' : '● Open'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
+                              <button className="compare-ai-action-btn" title={fb.status==='resolved'?'Reopen':'Mark resolved'}
+                                onClick={() => toggleFeedbackStatus(fb.id)} style={{padding:'0.25rem 0.5rem',fontSize:'0.75rem'}}>
+                                {fb.status === 'resolved' ? <RotateCcw size={13}/> : <CheckCircle2 size={13}/>}
+                              </button>
+                              <button className="compare-ai-action-btn" title="Delete"
+                                onClick={() => deleteFeedback(fb.id)} style={{padding:'0.25rem 0.5rem',fontSize:'0.75rem',borderColor:'var(--danger)',color:'var(--danger)'}}>
+                                <Trash2 size={13}/>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* MODAL: ASIN AI STRATEGY & ACTION AUDIT */}
         {selectedAsinForAI && (
           <div className="modal-overlay" onClick={() => setSelectedAsinForAI(null)}>
@@ -3364,12 +3613,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                       </button>
                       <button 
                         className="save-btn"
-                        onClick={() => {
-                          if (feedbackText.trim()) {
-                            // In a real app, send to API here
-                            setFeedbackSubmitted(true);
-                          }
-                        }}
+                        onClick={submitFeedback}
                         disabled={!feedbackText.trim()}
                       >
                         <Send size={16} /> Submit Feedback
