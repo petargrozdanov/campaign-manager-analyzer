@@ -1,18 +1,25 @@
 :root {
-  --bg-primary: #0f1115;
-  --bg-secondary: #1a1d24;
-  --bg-tertiary: #232730;
-  --text-primary: #f0f2f5;
-  --text-secondary: #a0a5b1;
-  --accent-color: #3b82f6;
-  --accent-hover: #2563eb;
-  --border-color: #2e323a;
-  --danger: #ef4444;
+  --bg-primary: #09090b;
+  --bg-secondary: #111114;
+  --bg-tertiary: #18181c;
+  --bg-hover: #1f1f24;
+  --text-primary: #f4f4f5;
+  --text-secondary: #71717a;
+  --text-muted: #3f3f46;
+  --accent-color: #4f8ef7;
+  --accent-hover: #3b7de8;
+  --accent-subtle: rgba(79,142,247,0.1);
+  --border-color: #27272a;
+  --border-subtle: #1c1c1f;
+  --danger: #f43f5e;
   --success: #10b981;
   --warning: #f59e0b;
   --purple: #a855f7;
-  
-  --font-sans: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 }
 
 * {
@@ -42,45 +49,50 @@ body {
 
 /* Sidebar Navigation */
 .tabs-nav {
-  width: 255px;
+  width: 220px;
+  min-width: 220px;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
-  padding: 1.5rem;
+  padding: 1.25rem 0.75rem;
   display: flex;
   flex-direction: column;
+  gap: 0;
 }
 
 .app-brand {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  font-size: 1.25rem;
+  gap: 0.6rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
+  padding: 0 0.5rem;
+  letter-spacing: -0.01em;
 }
 
 .tabs-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.15rem;
   flex-grow: 1;
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
   background-color: transparent;
   color: var(--text-secondary);
   border: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
-  transition: all 0.2s;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
 }
 
 .tab-btn:hover {
@@ -89,24 +101,25 @@ body {
 }
 
 .tab-btn.active {
-  background-color: var(--bg-tertiary);
+  background-color: var(--accent-subtle);
   color: var(--accent-color);
+  font-weight: 600;
 }
 
 .nav-reset-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: 0.4rem;
+  padding: 0.55rem;
   background-color: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  margin-top: auto;
-  font-size: 0.85rem;
-  transition: all 0.2s;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  transition: all 0.15s;
 }
 
 .nav-reset-btn:hover {
@@ -117,10 +130,11 @@ body {
 /* Main Content Area */
 .tab-content {
   flex-grow: 1;
-  padding: 2rem;
+  padding: 1.75rem 2rem;
   overflow-y: auto;
   background-color: var(--bg-primary);
 }
+
 
 /* Upload Container */
 .upload-container {
@@ -345,7 +359,7 @@ body {
 
 /* Dashboard Container */
 .dashboard-container {
-  max-width: 1350px;
+  max-width: 1380px;
   margin: 0 auto;
   width: 100%;
 }
@@ -354,15 +368,16 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
   flex-wrap: wrap;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .dashboard-title {
-  font-size: 1.85rem;
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .date-span-subtitle {
@@ -370,9 +385,10 @@ body {
   align-items: center;
   gap: 0.4rem;
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
 }
+
 
 /* Period Filter Bar */
 .period-filter-bar {
@@ -434,36 +450,42 @@ body {
 /* Metrics Cards */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .metric-card {
   background-color: var(--bg-secondary);
-  padding: 1.25rem 1.5rem;
-  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
+  transition: border-color 0.15s;
+}
+
+.metric-card:hover {
+  border-color: rgba(79,142,247,0.3);
 }
 
 .metric-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .metric-title {
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
 }
 
 .metric-value {
-  font-size: 1.85rem;
+  font-size: 1.55rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 /* Comparison Delta Badges */
@@ -471,19 +493,19 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.15rem;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.15rem 0.4rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 4px;
 }
 
 .delta-good {
-  background-color: rgba(16, 185, 129, 0.15);
+  background-color: rgba(16, 185, 129, 0.12);
   color: #34d399;
 }
 
 .delta-bad {
-  background-color: rgba(239, 68, 68, 0.15);
+  background-color: rgba(244, 63, 94, 0.12);
   color: #f87171;
 }
 
@@ -491,36 +513,35 @@ body {
 .asin-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .asin-item {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s;
 }
 
 .asin-item:hover {
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-color: rgba(79, 142, 247, 0.3);
 }
 
 .asin-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.15rem 1.5rem;
+  padding: 0.9rem 1.25rem;
   cursor: pointer;
   background-color: var(--bg-secondary);
-  transition: background-color 0.2s;
+  transition: background-color 0.15s;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .asin-header:hover {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-hover);
 }
 
 .asin-title-section {
@@ -2299,4 +2320,95 @@ body {
 
 .ew-asin-kpi .ew-kpi-value {
   font-size: 0.95rem;
+}
+
+/* ========================================
+   COMPARE WEEKS — NOTES INPUT & EXPORT BAR
+   ======================================== */
+.compare-note-input {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: var(--font-sans);
+}
+
+.compare-note-input:focus {
+  border-color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
+.compare-note-input::placeholder {
+  color: var(--text-muted);
+}
+
+.compare-export-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.9rem 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-top: 1rem;
+}
+
+.compare-export-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.compare-export-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.compare-export-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.compare-export-toggle input[type="checkbox"] {
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+/* Sleeker campaign table rows */
+.campaign-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.campaign-table tbody tr {
+  transition: background 0.1s;
+}
+
+.campaign-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.campaign-table tbody td {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.84rem;
 }

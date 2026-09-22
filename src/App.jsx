@@ -819,8 +819,10 @@ function App() {
   // Comparison State
   const [compareIdA, setCompareIdA] = useState('');
   const [compareIdB, setCompareIdB] = useState('');
-  const [compareFilter, setCompareFilter] = useState('all'); // 'all', 'action_needed', 'winners', 'margin_improved'
+  const [compareFilter, setCompareFilter] = useState('all');
   const [selectedCompareAsinForAI, setSelectedCompareAsinForAI] = useState(null);
+  const [compareNotes, setCompareNotes] = useState({}); // { [asin]: string }
+  const [exportAllRows, setExportAllRows] = useState(true);
 
   // Bulk Operations State
   const [bulkActions, setBulkActions] = useState({});
@@ -1578,6 +1580,70 @@ function App() {
     setGlobalStrategy(DEFAULT_GLOBAL_STRATEGY);
     setStrategySavedToast(true);
     setTimeout(() => setStrategySavedToast(false), 2500);
+  };
+
+  // Compare Notes Export Handler
+  const exportCompareNotes = (rows, includeAll) => {
+    if (!comparisonViewData) return;
+    const snapAName = comparisonViewData.snapA?.name || 'Week A';
+    const snapBName = comparisonViewData.snapB?.name || 'Week B';
+
+    const exportRows = rows.filter(row => includeAll || (compareNotes[row.asin] || '').trim());
+
+    const wsData = [
+      ['ASIN', 'Product Name', 'Campaign Names (A)', 'Campaign Names (B)',
+       `Spend (${snapAName})`, `Spend (${snapBName})`,
+       `Sales (${snapAName})`, `Sales (${snapBName})`,
+       `ACoS (${snapAName})`, `ACoS (${snapBName})`,
+       'AI Suggestion', 'Your Notes']
+    ];
+
+    exportRows.forEach(row => {
+      const catItem = asinCatalog[row.asin];
+      const productName = catItem?.productName || row.asin;
+      const campsA = (row.campaignsA || []).map(c => c.name).join(', ');
+      const campsB = (row.campaignsB || []).map(c => c.name).join(', ');
+      wsData.push([
+        row.asin,
+        productName,
+        campsA,
+        campsB,
+        row.spendA,
+        row.spendB,
+        row.salesA,
+        row.salesB,
+        row.acosA ? (row.acosA / 100) : 0,
+        row.acosB ? (row.acosB / 100) : 0,
+        row.aiReport?.shortSuggestion || '',
+        compareNotes[row.asin] || ''
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Format currency and percent columns
+    const currencyCols = [4, 5, 6, 7];
+    const percentCols = [8, 9];
+    wsData.slice(1).forEach((_, ri) => {
+      currencyCols.forEach(ci => {
+        const cellRef = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+        if (ws[cellRef]) ws[cellRef].z = '$#,##0.00';
+      });
+      percentCols.forEach(ci => {
+        const cellRef = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+        if (ws[cellRef]) ws[cellRef].z = '0.00%';
+      });
+    });
+
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 36 }, { wch: 40 }, { wch: 40 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      { wch: 12 }, { wch: 12 }, { wch: 42 }, { wch: 40 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'WoW Comparison Notes');
+    XLSX.writeFile(wb, `WoW_Comparison_Notes_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   // Bulk Operations Handlers
@@ -2948,17 +3014,18 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                       <table className="campaign-table">
                         <thead>
                           <tr>
-                            <th>ASIN & Product Details</th>
+                            <th>ASIN & Product</th>
                             <th className="text-right">Spend (A)</th>
                             <th className="text-right">Spend (B)</th>
-                            <th className="text-right">Spend Change</th>
+                            <th className="text-right">Δ Spend</th>
                             <th className="text-right">Sales (A)</th>
                             <th className="text-right">Sales (B)</th>
-                            <th className="text-right">Sales Change</th>
+                            <th className="text-right">Δ Sales</th>
                             <th className="text-right">ACoS (A)</th>
                             <th className="text-right">ACoS (B)</th>
-                            <th className="text-right">ACoS Change</th>
-                            <th>AI Strategic Suggestion</th>
+                            <th className="text-right">Δ ACoS</th>
+                            <th>AI Suggestion</th>
+                            <th style={{minWidth: '170px'}}>📝 Notes</th>
                             <th className="text-center">Action</th>
                           </tr>
                         </thead>
@@ -2985,27 +3052,18 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                                         <span className={`strategy-pill mode-${report.mode}`}>
                                           {report.mode.toUpperCase()}
                                         </span>
-                                        <span className="compare-target-acos">
-                                          Target: {report.targetAcos}%
-                                        </span>
                                       </div>
                                     </div>
                                   </td>
                                   <td className="text-right">{formatCurrency(row.spendA)}</td>
                                   <td className="text-right">{formatCurrency(row.spendB)}</td>
-                                  <td className="text-right">
-                                    {renderDelta(row.spendB, row.spendA)}
-                                  </td>
+                                  <td className="text-right">{renderDelta(row.spendB, row.spendA)}</td>
                                   <td className="text-right">{formatCurrency(row.salesA)}</td>
                                   <td className="text-right">{formatCurrency(row.salesB)}</td>
-                                  <td className="text-right">
-                                    {renderDelta(row.salesB, row.salesA)}
-                                  </td>
+                                  <td className="text-right">{renderDelta(row.salesB, row.salesA)}</td>
                                   <td className="text-right">{formatPercent(row.acosA)}</td>
                                   <td className="text-right">{formatPercent(row.acosB)}</td>
-                                  <td className="text-right">
-                                    {renderDelta(row.acosB, row.acosA, true)}
-                                  </td>
+                                  <td className="text-right">{renderDelta(row.acosB, row.acosA, true)}</td>
                                   <td>
                                     <div className="compare-ai-suggestion-cell">
                                       <span className={`compare-ai-badge badge-${report.badge.type}`}>
@@ -3016,14 +3074,23 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                                       </div>
                                     </div>
                                   </td>
+                                  <td>
+                                    <input
+                                      className="compare-note-input"
+                                      type="text"
+                                      placeholder="Add action note..."
+                                      value={compareNotes[row.asin] || ''}
+                                      onChange={(e) => setCompareNotes(prev => ({ ...prev, [row.asin]: e.target.value }))}
+                                    />
+                                  </td>
                                   <td className="text-center">
-                                    <button 
+                                    <button
                                       className="compare-ai-action-btn"
-                                      onClick={() => setSelectedCompareAsinForAI({ 
-                                        row, 
-                                        report, 
-                                        snapA: comparisonViewData.snapA, 
-                                        snapB: comparisonViewData.snapB 
+                                      onClick={() => setSelectedCompareAsinForAI({
+                                        row,
+                                        report,
+                                        snapA: comparisonViewData.snapA,
+                                        snapB: comparisonViewData.snapB
                                       })}
                                       title="View Detailed Comparative AI Action Plan"
                                     >
@@ -3037,7 +3104,45 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                         </tbody>
                       </table>
                     </div>
+
+                    {/* EXPORT BAR */}
+                    <div className="compare-export-bar">
+                      <div className="compare-export-left">
+                        <ExternalLink size={16} color="var(--accent-color)" />
+                        <span className="compare-export-label">Export Comparison</span>
+                        <label className="compare-export-toggle">
+                          <input
+                            type="checkbox"
+                            checked={exportAllRows}
+                            onChange={(e) => setExportAllRows(e.target.checked)}
+                          />
+                          Include all rows (not just noted)
+                        </label>
+                        <span style={{color: 'var(--text-secondary)', fontSize: '0.78rem'}}>
+                          {Object.values(compareNotes).filter(n => n.trim()).length} note{Object.values(compareNotes).filter(n => n.trim()).length !== 1 ? 's' : ''} added
+                        </span>
+                      </div>
+                      <div style={{display: 'flex', gap: '0.75rem'}}>
+                        {Object.keys(compareNotes).length > 0 && (
+                          <button
+                            className="strategy-tool-btn reset-btn"
+                            onClick={() => setCompareNotes({})}
+                          >
+                            <RotateCcw size={13} /> Clear Notes
+                          </button>
+                        )}
+                        <button
+                          className="save-btn"
+                          onClick={() => exportCompareNotes(comparisonViewData.asinRows, exportAllRows)}
+                          style={{display: 'flex', alignItems: 'center', gap: '0.4rem'}}
+                        >
+                          <ExternalLink size={15} /> Export .xlsx
+                        </button>
+                      </div>{/* end right buttons */}
+                    </div>{/* end compare-export-bar */}
+
                   </div>
+
                 ) : (
                   <p style={{color: 'var(--text-secondary)', textAlign: 'center', marginTop: '3rem'}}>
                     Please select both Period A and Period B from the dropdowns above to compare performance.
