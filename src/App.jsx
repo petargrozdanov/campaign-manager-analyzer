@@ -1349,25 +1349,28 @@ function App() {
     let peshRecords = [];
     
     rawRecords.forEach(row => {
-      const campName = String(row['Campaign Name'] || row['Campaign'] || row['campaign'] || '').toUpperCase();
+      // The parsed data uses 'campaignName' at the root, but for other fields we need originalRow
+      const campName = String(row.campaignName || '').toUpperCase();
       if (!campName.includes('PESH')) return;
 
+      const orig = row.originalRow || {};
+
       // Extract entity safely
-      const entity = String(row['Entity'] || row['Record Type'] || '').trim().toLowerCase();
+      const entity = String(orig['Entity'] || orig['Record Type'] || '').trim().toLowerCase();
       // If Bulk File, restrict to Keyword/Product Targeting.
       // If standard Campaign Manager report, we might not have Entity, but we will grab what we can.
       if (entity && !(entity === 'keyword' || entity === 'product targeting')) return;
 
-      const adGroup = row['Ad Group Name'] || row['Ad Group'] || row['ad group'] || '-';
-      const keyword = row['Customer Search Term'] || row['Search Term'] || row['Keyword Text'] || row['Keyword'] || row['Product Targeting Expression'] || row['Targeting'] || '-';
-      const matchType = row['Match Type'] || row['match type'] || '-';
+      const adGroup = orig['Ad Group Name'] || orig['Ad Group'] || orig['ad group'] || '-';
+      const keyword = orig['Customer Search Term'] || orig['Search Term'] || orig['Keyword Text'] || orig['Keyword'] || orig['Product Targeting Expression'] || orig['Targeting'] || '-';
+      const matchType = orig['Match Type'] || orig['match type'] || '-';
       
-      const bidVal = parseFloat(row['Bid'] || row['Keyword Bid'] || row['Max Bid']) || null;
+      const bidVal = parseFloat(orig['Bid'] || orig['Keyword Bid'] || orig['Max Bid']) || null;
       
-      const clicks = parseFloat(getVal(row, ['Clicks', 'clicks'])) || 0;
-      const spend = parseFloat(getVal(row, ['Spend', 'spend'])) || 0;
-      const sales = parseFloat(getVal(row, ['Sales', 'sales', '7 Day Total Sales'])) || 0;
-      const orders = parseFloat(getVal(row, ['Orders', 'orders', '7 Day Total Orders'])) || 0;
+      const clicks = row.clicks || 0;
+      const spend = row.spend || 0;
+      const sales = row.sales || 0;
+      const orders = row.orders || 0;
       
       // Skip empty/invalid rows that might slip through bulk files
       if (keyword === '-' && clicks === 0 && spend === 0) return;
