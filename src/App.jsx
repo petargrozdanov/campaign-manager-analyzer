@@ -2121,29 +2121,59 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
       <main className="tab-content">
         {/* TAB 1: UPLOAD */}
         {activeTab === 'upload' && (
-          <div className="upload-container">
-            <div 
-              className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${loading ? 'processing' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <UploadCloud size={48} className="upload-icon" />
-              <h1 className="upload-title">Drop Campaign Report Here</h1>
-              <p className="upload-subtitle">
-                Drag & drop your Amazon Campaign Manager CSV or Excel file, or click to browse.
-              </p>
-              
-              <label className="upload-button">
-                {loading ? 'Processing...' : 'Select Report File'}
-                <input 
-                  type="file" 
-                  accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-                  className="file-input" 
-                  onChange={handleFileUpload}
-                  disabled={loading}
-                />
-              </label>
+          <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '1.5rem auto', maxWidth: '850px', width: '100%'}}>
+            <div style={{display: 'flex', gap: '1.5rem', width: '100%', alignItems: 'stretch'}}>
+              {/* Standard Report Upload */}
+              <div 
+                className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${loading ? 'processing' : ''}`}
+                style={{flex: 1, margin: 0, padding: '2.5rem 1.5rem'}}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <FileSpreadsheet size={42} className="upload-icon" />
+                <h2 style={{fontSize: '1.15rem', marginBottom: '0.5rem', color: 'var(--text-primary)'}}>Campaign Report</h2>
+                <p className="upload-subtitle" style={{fontSize: '0.85rem', marginBottom: '1.5rem'}}>
+                  For Dashboard, History, & ASIN Tracking.
+                </p>
+                
+                <label className="upload-button">
+                  {loading ? 'Processing...' : 'Upload Report'}
+                  <input 
+                    type="file" 
+                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                    className="file-input" 
+                    onChange={handleFileUpload}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
+
+              {/* Bulk File Upload */}
+              <div 
+                className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${loading ? 'processing' : ''}`}
+                style={{flex: 1, margin: 0, padding: '2.5rem 1.5rem', borderColor: 'rgba(168, 85, 247, 0.4)'}}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <Target size={42} style={{color: 'var(--purple)', marginBottom: '1rem'}} />
+                <h2 style={{fontSize: '1.15rem', marginBottom: '0.5rem', color: 'var(--text-primary)'}}>Bulk Operations File</h2>
+                <p className="upload-subtitle" style={{fontSize: '0.85rem', marginBottom: '1.5rem'}}>
+                  For the <b>PESH Optimizer</b> & Keyword actions.
+                </p>
+                
+                <label className="upload-button" style={{backgroundColor: 'var(--purple)'}}>
+                  {loading ? 'Processing...' : 'Upload Bulk File'}
+                  <input 
+                    type="file" 
+                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                    className="file-input" 
+                    onChange={handleFileUpload}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
             </div>
 
             {rawRecords.length > 0 && (
