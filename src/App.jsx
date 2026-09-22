@@ -1163,6 +1163,12 @@ function App() {
     let totalClicks = 0;
     let totalImpressions = 0;
 
+    // Easy Win detection
+    const isEasyWin = (name) => {
+      const n = (name || '').toUpperCase();
+      return /\bEW\b/.test(n) || /EASY\s*WIN/.test(n);
+    };
+
     records.forEach(row => {
       totalSpend += row.spend;
       totalSales += row.sales;
@@ -1197,7 +1203,8 @@ function App() {
           impressions: 0,
           clicks: 0,
           orders: 0,
-          budget: row.budget
+          budget: row.budget,
+          isEasyWin: isEasyWin(row.campaignName)
         };
       }
 
@@ -1246,6 +1253,35 @@ function App() {
     const totalCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
     const totalCvr = totalClicks > 0 ? (totalOrders / totalClicks) * 100 : 0;
 
+    // Build Easy Win summary: group EW campaigns by ASIN
+    const ewByAsin = {};
+    sortedAsins.forEach(asinGroup => {
+      asinGroup.campaigns.forEach(camp => {
+        if (!camp.isEasyWin) return;
+        if (!ewByAsin[asinGroup.asin]) {
+          ewByAsin[asinGroup.asin] = {
+            asin: asinGroup.asin,
+            spend: 0, sales: 0, orders: 0,
+            campaigns: []
+          };
+        }
+        ewByAsin[asinGroup.asin].spend += camp.spend;
+        ewByAsin[asinGroup.asin].sales += camp.sales;
+        ewByAsin[asinGroup.asin].orders += camp.orders;
+        ewByAsin[asinGroup.asin].campaigns.push(camp);
+      });
+    });
+
+    const easyWinAsins = Object.values(ewByAsin).map(g => ({
+      ...g,
+      acos: g.sales > 0 ? (g.spend / g.sales) * 100 : (g.spend > 0 ? null : 0),
+      isBleeding: g.sales === 0 && g.spend > 0
+    })).sort((a, b) => b.spend - a.spend);
+
+    const ewTotalSpend = easyWinAsins.reduce((s, g) => s + g.spend, 0);
+    const ewTotalSales = easyWinAsins.reduce((s, g) => s + g.sales, 0);
+    const ewTotalAcos = ewTotalSales > 0 ? (ewTotalSpend / ewTotalSales) * 100 : 0;
+
     return {
       asins: sortedAsins,
       totalSpend,
@@ -1257,9 +1293,18 @@ function App() {
       totalRoas,
       totalAvgCpc,
       totalCtr,
-      totalCvr
+      totalCvr,
+      easyWin: {
+        asins: easyWinAsins,
+        totalSpend: ewTotalSpend,
+        totalSales: ewTotalSales,
+        totalAcos: ewTotalAcos,
+        isBleeding: ewTotalSales === 0 && ewTotalSpend > 0
+      }
     };
   };
+
+
 
   const dashboardData = useMemo(() => {
     if (rawRecords.length === 0) return null;
@@ -2100,6 +2145,113 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                     <div className="metric-value">{dashboardData.current.totalCvr.toFixed(2)}%</div>
                   </div>
                 </div>
+
+                {/* EASY WIN CAMPAIGNS SECTION */}
+                {dashboardData.current.easyWin?.asins?.length > 0 && (() => {
+                  const ew = dashboardData.current.easyWin;
+                  return (
+                    <div className="ew-section">
+                      <div className="ew-section-header">
+                        <div className="ew-section-title-row">
+                          <span className="ew-icon">⚡</span>
+                          <h2 className="ew-section-title">Easy Win Campaigns</h2>
+                          <span className="ew-campaign-count">{ew.asins.reduce((s, g) => s + g.campaigns.length, 0)} campaigns across {ew.asins.length} ASINs</span>
+                        </div>
+                        {/* Overall EW KPIs */}
+                        <div className="ew-overall-kpis">
+                          <div className="ew-kpi">
+                            <span className="ew-kpi-label">Total Spend</span>
+                            <span className="ew-kpi-value">{formatCurrency(ew.totalSpend)}</span>
+                          </div>
+                          <div className="ew-kpi">
+                            <span className="ew-kpi-label">Total Sales</span>
+                            <span className="ew-kpi-value">{formatCurrency(ew.totalSales)}</span>
+                          </div>
+                          <div className="ew-kpi">
+                            <span className="ew-kpi-label">Overall ACoS</span>
+                            <span className={`ew-kpi-value ${ew.isBleeding ? 'bad-acos' : ew.totalAcos > globalStrategy.targetAcos ? 'bad-acos' : 'good-acos'}`}>
+                              {ew.isBleeding ? 'N/A ⚠️' : formatPercent(ew.totalAcos)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ASIN Subcategories */}
+                      <div className="ew-asin-list">
+                        {ew.asins.map((ewAsin) => {
+                          const catItem = asinCatalog[ewAsin.asin];
+                          const productName = catItem?.productName && catItem.productName !== `Product ${ewAsin.asin}`
+                            ? catItem.productName
+                            : null;
+                          const ewAsinKey = `ew_${ewAsin.asin}`;
+                          return (
+                            <div key={ewAsinKey} className="ew-asin-item">
+                              <div className="ew-asin-header" onClick={() => toggleAsin(ewAsinKey)}>
+                                <div className="ew-asin-left">
+                                  <ChevronDown size={18} className={`chevron-icon ${expandedAsin === ewAsinKey ? 'open' : ''}`} />
+                                  <div>
+                                    <div className="ew-asin-name-row">
+                                      <span className="asin-name">{ewAsin.asin}</span>
+                                      {productName && <span className="asin-product-title" title={productName}>{productName}</span>}
+                                    </div>
+                                    <span style={{fontSize:'0.75rem',color:'var(--text-secondary)'}}>
+                                      {ewAsin.campaigns.length} Easy Win campaign{ewAsin.campaigns.length !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="ew-asin-kpis">
+                                  <div className="ew-asin-kpi">
+                                    <span className="ew-kpi-label">Spend</span>
+                                    <span className="ew-kpi-value">{formatCurrency(ewAsin.spend)}</span>
+                                  </div>
+                                  <div className="ew-asin-kpi">
+                                    <span className="ew-kpi-label">Sales</span>
+                                    <span className="ew-kpi-value">{formatCurrency(ewAsin.sales)}</span>
+                                  </div>
+                                  <div className="ew-asin-kpi">
+                                    <span className="ew-kpi-label">ACoS</span>
+                                    <span className={`ew-kpi-value ${ewAsin.isBleeding ? 'bad-acos' : ewAsin.acos > globalStrategy.targetAcos ? 'bad-acos' : 'good-acos'}`}>
+                                      {ewAsin.isBleeding ? 'N/A ⚠️' : formatPercent(ewAsin.acos)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {expandedAsin === ewAsinKey && (
+                                <div className="campaigns-container" style={{marginTop: '0.5rem', paddingLeft: '2rem'}}>
+                                  <table className="campaign-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Campaign Name</th>
+                                        <th className="text-right">Spend</th>
+                                        <th className="text-right">Sales</th>
+                                        <th className="text-right">ACoS</th>
+                                        <th className="text-right">Orders</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {ewAsin.campaigns.map((camp, idx) => (
+                                        <tr key={idx}>
+                                          <td className="campaign-name-cell" title={camp.name}>{camp.name}</td>
+                                          <td className="text-right">{formatCurrency(camp.spend)}</td>
+                                          <td className="text-right">{formatCurrency(camp.sales)}</td>
+                                          <td className={`text-right ${camp.isBleeding ? 'bad-acos' : camp.acos > globalStrategy.targetAcos ? 'bad-acos' : 'good-acos'}`}>
+                                            {camp.isBleeding ? 'N/A ⚠️' : formatPercent(camp.acos)}
+                                          </td>
+                                          <td className="text-right">{formatNumber(camp.orders)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* ASIN Breakdown Accordion List */}
                 <div className="asin-list">

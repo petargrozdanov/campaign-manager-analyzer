@@ -2164,3 +2164,139 @@ body {
   text-decoration: line-through;
   color: var(--text-secondary);
 }
+
+/* ========================================
+   EASY WIN CAMPAIGNS SECTION
+   ======================================== */
+.ew-section {
+  background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, rgba(16,185,129,0.04) 100%);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-left: 4px solid var(--warning);
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.ew-section-header {
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid rgba(245,158,11,0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ew-section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ew-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.ew-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ew-campaign-count {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.2);
+  padding: 0.15rem 0.55rem;
+  border-radius: 5px;
+}
+
+.ew-overall-kpis {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.ew-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ew-kpi-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.ew-kpi-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ASIN subcategories inside Easy Win */
+.ew-asin-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ew-asin-item {
+  border-top: 1px solid rgba(245,158,11,0.1);
+}
+
+.ew-asin-item:first-child {
+  border-top: none;
+}
+
+.ew-asin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.5rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ew-asin-header:hover {
+  background: rgba(245,158,11,0.05);
+}
+
+.ew-asin-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ew-asin-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ew-asin-kpis {
+  display: flex;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+
+.ew-asin-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+
+.ew-asin-kpi .ew-kpi-label {
+  font-size: 0.68rem;
+}
+
+.ew-asin-kpi .ew-kpi-value {
+  font-size: 0.95rem;
+}
