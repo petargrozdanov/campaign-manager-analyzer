@@ -957,9 +957,29 @@ function App() {
       reader.onload = (e) => {
         try {
           const workbook = XLSX.read(e.target.result, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet);
+          
+          let json = [];
+          
+          // Look for Amazon-specific sheets (Bulk Operations or Search Term Reports)
+          const targetSheets = workbook.SheetNames.filter(name => 
+            name.toLowerCase().includes('sponsored products campaigns') ||
+            name.toLowerCase().includes('sp campaigns') ||
+            name.toLowerCase().includes('search term report')
+          );
+
+          if (targetSheets.length > 0) {
+            // Process the specific sheets
+            targetSheets.forEach(sheetName => {
+              const worksheet = workbook.Sheets[sheetName];
+              json = json.concat(XLSX.utils.sheet_to_json(worksheet));
+            });
+          } else {
+            // Fallback: Use the first sheet that isn't 'Portfolios'
+            const dataSheetName = workbook.SheetNames.find(n => !n.toLowerCase().includes('portfolio')) || workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[dataSheetName];
+            json = XLSX.utils.sheet_to_json(worksheet);
+          }
+          
           onDataReady(json);
         } catch (err) {
           console.error('Excel parse error:', err);
@@ -1339,7 +1359,7 @@ function App() {
       if (entity && !(entity === 'keyword' || entity === 'product targeting')) return;
 
       const adGroup = row['Ad Group Name'] || row['Ad Group'] || row['ad group'] || '-';
-      const keyword = row['Keyword Text'] || row['Keyword'] || row['Product Targeting Expression'] || row['Targeting'] || '-';
+      const keyword = row['Customer Search Term'] || row['Search Term'] || row['Keyword Text'] || row['Keyword'] || row['Product Targeting Expression'] || row['Targeting'] || '-';
       const matchType = row['Match Type'] || row['match type'] || '-';
       
       const bidVal = parseFloat(row['Bid'] || row['Keyword Bid'] || row['Max Bid']) || null;
