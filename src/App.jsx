@@ -1322,6 +1322,128 @@ function App() {
     };
   }, [rawRecords, selectedPeriod, dateRangeInfo, globalStrategy]);
 
+  // PESH Data Optimizer Engine
+  const peshData = useMemo(() => {
+    if (rawRecords.length === 0) return null;
+
+    let peshRecords = [];
+    
+    rawRecords.forEach(row => {
+      const campName = String(row['Campaign Name'] || row['Campaign'] || row['campaign'] || '').toUpperCase();
+      if (!campName.includes('PESH')) return;
+
+      // Extract entity safely
+      const entity = String(row['Entity'] || row['Record Type'] || '').trim().toLowerCase();
+      // If Bulk File, restrict to Keyword/Product Targeting.
+      // If standard Campaign Manager report, we might not have Entity, but we will grab what we can.
+      if (entity && !(entity === 'keyword' || entity === 'product targeting')) return;
+
+      const adGroup = row['Ad Group Name'] || row['Ad Group'] || row['ad group'] || '-';
+      const keyword = row['Keyword Text'] || row['Keyword'] || row['Product Targeting Expression'] || row['Targeting'] || '-';
+      const matchType = row['Match Type'] || row['match type'] || '-';
+      
+      const bidVal = parseFloat(row['Bid'] || row['Keyword Bid'] || row['Max Bid']) || null;
+      
+      const clicks = parseFloat(getVal(row, ['Clicks', 'clicks'])) || 0;
+      const spend = parseFloat(getVal(row, ['Spend', 'spend'])) || 0;
+      const sales = parseFloat(getVal(row, ['Sales', 'sales', '7 Day Total Sales'])) || 0;
+      const orders = parseFloat(getVal(row, ['Orders', 'orders', '7 Day Total Orders'])) || 0;
+      
+      // Skip empty/invalid rows that might slip through bulk files
+      if (keyword === '-' && clicks === 0 && spend === 0) return;
+
+      peshRecords.push({
+        campaign: campName,
+        adGroup,
+        keyword,
+        matchType,
+        bid: bidVal,
+        clicks,
+        spend,
+        sales,
+        orders
+      });
+    });
+
+    if (peshRecords.length === 0) return null;
+
+    const targetAcos = globalStrategy.targetAcos / 100;
+    
+    let totalSpend = 0;
+    let totalSales = 0;
+    
+    const analyzed = peshRecords.map(row => {
+      totalSpend += row.spend;
+      totalSales += row.sales;
+      
+      const cpc = row.clicks > 0 ? row.spend / row.clicks : 0;
+      const cvr = row.clicks > 0 ? row.orders / row.clicks : 0;
+      const aov = row.orders > 0 ? row.sales / row.orders : 0;
+      const acos = row.sales > 0 ? row.spend / row.sales : (row.spend > 0 ? Infinity : 0);
+      const suggestedBid = targetAcos * cvr * aov;
+      
+      let quadrant = '';
+      let action = '';
+      let rationale = '';
+
+      if (row.sales === 0 && row.spend >= globalStrategy.bleedThreshold) {
+        quadrant = 'Bleeder';
+        action = 'Pause / Add Negative';
+        rationale = `0 sales, spend > $${globalStrategy.bleedThreshold}. Cut waste.`;
+      } else if (row.sales > 0 && acos > targetAcos * 1.5) {
+        quadrant = 'Bleeder';
+        action = 'Lower Bid 30%';
+        rationale = `ACOS ${(acos*100).toFixed(1)}% is > 1.5x target.`;
+      } else if (row.sales > 0 && acos <= targetAcos && row.orders >= 2) {
+        quadrant = 'Top Performer';
+        action = 'Increase Bid 15%';
+        rationale = 'Strong efficiency. Scale up.';
+      } else if ((row.sales > 0 && acos < targetAcos && row.orders < 2) || (row.clicks > 0 && cvr > 0.15 && row.clicks < 10)) {
+        quadrant = 'Under-delivering';
+        action = 'Increase Bid 25%';
+        rationale = 'High potential CVR/ACOS, low volume.';
+      } else if (row.sales > 0 && acos > targetAcos) {
+        quadrant = 'Mediocre';
+        action = 'Target CPC';
+        rationale = `ACOS slightly high. Optimize bid.`;
+      } else {
+        quadrant = 'Observing';
+        action = 'Monitor';
+        rationale = 'Not enough data.';
+      }
+
+      return {
+        ...row,
+        cpc,
+        cvr,
+        aov,
+        acos,
+        suggestedBid,
+        quadrant,
+        action,
+        rationale
+      };
+    });
+
+    const bleeders = analyzed.filter(r => r.quadrant === 'Bleeder');
+    const topPerformers = analyzed.filter(r => r.quadrant === 'Top Performer');
+
+    return {
+      records: analyzed,
+      totalSpend,
+      totalSales,
+      totalAcos: totalSales > 0 ? totalSpend / totalSales : (totalSpend > 0 ? Infinity : 0),
+      bleeders,
+      counts: {
+        bleeders: bleeders.length,
+        topPerformers: topPerformers.length,
+        underDelivering: analyzed.filter(r => r.quadrant === 'Under-delivering').length,
+        mediocre: analyzed.filter(r => r.quadrant === 'Mediocre').length,
+        total: analyzed.length
+      }
+    };
+  }, [rawRecords, globalStrategy]);
+
   // Snapshot actions
   const saveCurrentSnapshot = () => {
     if (rawRecords.length === 0) return;
@@ -1958,6 +2080,15 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
           >
             <ListChecks size={18} />
             Bulk Operations
+          </button>
+          
+          <button 
+            className={`tab-btn ${activeTab === 'pesh_optimizer' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pesh_optimizer')}
+            style={{ color: activeTab === 'pesh_optimizer' ? 'var(--purple)' : '' }}
+          >
+            <Target size={18} />
+            PESH Optimizer
           </button>
           <button 
             className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
@@ -3285,6 +3416,170 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             )}
           </div>
         )}
+        {/* TAB 8: PESH OPTIMIZER */}
+        {activeTab === 'pesh_optimizer' && (
+          <div className="dashboard-container">
+            <div className="dashboard-header">
+              <div>
+                <h1 className="dashboard-title">
+                  <Target size={28} color="var(--purple)" style={{verticalAlign:'middle',marginRight:'0.5rem'}} />
+                  PESH Campaign Optimizer
+                </h1>
+                <p className="date-span-subtitle">
+                  AI-driven keyword matrix and waste reduction for PESH strategies.
+                </p>
+              </div>
+            </div>
+
+            {!peshData ? (
+              <div className="empty-state">
+                <Target size={48} style={{color: 'var(--border-color)', marginBottom: '1rem'}} />
+                <h2>No PESH Data Found</h2>
+                <p>Ensure your uploaded file contains campaigns with "PESH" in the name, and includes Keyword-level rows (e.g., from a Bulk Operations file).</p>
+              </div>
+            ) : (
+              <>
+                {/* EXECUTIVE OVERVIEW */}
+                <div className="metrics-grid">
+                  <div className="metric-card">
+                    <div className="metric-header-row">
+                      <span className="metric-title">PESH Spend</span>
+                      <TrendingDown size={16} color="var(--text-secondary)" />
+                    </div>
+                    <div className="metric-value">{formatCurrency(peshData.totalSpend)}</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-header-row">
+                      <span className="metric-title">PESH Sales</span>
+                      <TrendingUp size={16} color="var(--text-secondary)" />
+                    </div>
+                    <div className="metric-value">{formatCurrency(peshData.totalSales)}</div>
+                  </div>
+                  <div className="metric-card" style={{borderColor: peshData.totalAcos > (globalStrategy.targetAcos/100) ? 'var(--danger)' : 'var(--border-color)'}}>
+                    <div className="metric-header-row">
+                      <span className="metric-title">PESH ACoS</span>
+                      <Target size={16} color="var(--text-secondary)" />
+                    </div>
+                    <div className="metric-value" style={{color: peshData.totalAcos > (globalStrategy.targetAcos/100) ? 'var(--danger)' : 'inherit'}}>
+                      {formatPercent(peshData.totalAcos * 100)}
+                    </div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-header-row">
+                      <span className="metric-title">Analyzed Targets</span>
+                      <BarChart2 size={16} color="var(--text-secondary)" />
+                    </div>
+                    <div className="metric-value">{peshData.counts.total}</div>
+                  </div>
+                </div>
+
+                {/* QUADRANT SUMMARY */}
+                <div style={{display:'flex', gap:'0.75rem', marginBottom:'1.5rem', flexWrap:'wrap'}}>
+                  <span className="strategy-pill" style={{background:'rgba(16, 185, 129, 0.1)', color:'#10b981', border:'1px solid rgba(16, 185, 129, 0.2)'}}>
+                    🚀 Top Performers: {peshData.counts.topPerformers}
+                  </span>
+                  <span className="strategy-pill" style={{background:'rgba(244, 63, 94, 0.1)', color:'#f43f5e', border:'1px solid rgba(244, 63, 94, 0.2)'}}>
+                    🛑 Bleeders: {peshData.counts.bleeders}
+                  </span>
+                  <span className="strategy-pill" style={{background:'rgba(59, 130, 246, 0.1)', color:'#3b82f6', border:'1px solid rgba(59, 130, 246, 0.2)'}}>
+                    📈 Under-delivering: {peshData.counts.underDelivering}
+                  </span>
+                  <span className="strategy-pill" style={{background:'rgba(245, 158, 11, 0.1)', color:'#f59e0b', border:'1px solid rgba(245, 158, 11, 0.2)'}}>
+                    ⚠️ Mediocre: {peshData.counts.mediocre}
+                  </span>
+                </div>
+
+                {/* HIGH PRIORITY WASTE */}
+                {peshData.bleeders.length > 0 && (
+                  <div style={{background: 'rgba(244, 63, 94, 0.05)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '2rem'}}>
+                    <h3 style={{color: 'var(--danger)', fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <AlertTriangle size={18} /> High-Priority Waste Reductions (Immediate Cuts)
+                    </h3>
+                    <div style={{maxHeight: '200px', overflowY: 'auto'}}>
+                      <table className="campaign-table" style={{background: 'transparent'}}>
+                        <thead>
+                          <tr>
+                            <th style={{background: 'transparent'}}>Keyword</th>
+                            <th style={{background: 'transparent'}}>Match</th>
+                            <th style={{background: 'transparent'}}>Spend</th>
+                            <th style={{background: 'transparent'}}>Sales</th>
+                            <th style={{background: 'transparent'}}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {peshData.bleeders.map((b, i) => (
+                            <tr key={i} style={{background: 'transparent'}}>
+                              <td style={{fontWeight:500}}>{b.keyword}</td>
+                              <td>{b.matchType}</td>
+                              <td style={{color: 'var(--danger)'}}>{formatCurrency(b.spend)}</td>
+                              <td>{formatCurrency(b.sales)}</td>
+                              <td><span className="strategy-pill" style={{background:'rgba(244, 63, 94, 0.1)', color:'#f43f5e'}}>{b.action}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* KEYWORD OPTIMIZATION MATRIX */}
+                <h3 style={{fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--text-primary)'}}>Keyword Optimization Matrix</h3>
+                <div className="comparison-table-container">
+                  <table className="campaign-table">
+                    <thead>
+                      <tr>
+                        <th>Campaign</th>
+                        <th>Ad Group</th>
+                        <th>Keyword</th>
+                        <th>Match</th>
+                        <th className="text-right">Bid</th>
+                        <th className="text-right">Clicks</th>
+                        <th className="text-right">Spend</th>
+                        <th className="text-right">Sales</th>
+                        <th className="text-right">Orders</th>
+                        <th className="text-right">ACoS</th>
+                        <th className="text-right">Suggested Bid</th>
+                        <th>Recommended Action</th>
+                        <th>Rationale</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {peshData.records.map((row, i) => (
+                        <tr key={i}>
+                          <td style={{maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={row.campaign}>{row.campaign}</td>
+                          <td style={{maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={row.adGroup}>{row.adGroup}</td>
+                          <td style={{fontWeight: 600}}>{row.keyword}</td>
+                          <td>{row.matchType}</td>
+                          <td className="text-right">{row.bid !== null ? formatCurrency(row.bid) : '-'}</td>
+                          <td className="text-right">{row.clicks}</td>
+                          <td className="text-right">{formatCurrency(row.spend)}</td>
+                          <td className="text-right">{formatCurrency(row.sales)}</td>
+                          <td className="text-right">{row.orders}</td>
+                          <td className="text-right" style={{color: row.acos > (globalStrategy.targetAcos/100) ? 'var(--danger)' : 'inherit'}}>
+                            {formatPercent(row.acos * 100)}
+                          </td>
+                          <td className="text-right" style={{fontWeight: 'bold', color: 'var(--accent-color)'}}>
+                            {formatCurrency(row.suggestedBid)}
+                          </td>
+                          <td>
+                            <span className="strategy-pill" style={{
+                              background: row.quadrant === 'Bleeder' ? 'rgba(244, 63, 94, 0.1)' : row.quadrant === 'Top Performer' ? 'rgba(16, 185, 129, 0.1)' : row.quadrant === 'Under-delivering' ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-tertiary)',
+                              color: row.quadrant === 'Bleeder' ? '#f43f5e' : row.quadrant === 'Top Performer' ? '#10b981' : row.quadrant === 'Under-delivering' ? '#3b82f6' : 'var(--text-primary)',
+                            }}>
+                              {row.action}
+                            </span>
+                          </td>
+                          <td style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>{row.rationale}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
 
         {/* TAB 7: ADMIN PANEL */}
         {activeTab === 'admin' && (() => {
