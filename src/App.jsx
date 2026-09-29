@@ -3723,25 +3723,29 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
         {/* TAB 9: SHEET EXPORTER */}
         {activeTab === 'sheet_exporter' && (() => {
           const exportAsins = [
-            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW" },
-            { name: "Hot tub cleaner", asin: "B012GNCI44" },
-            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y" },
-            { name: "Fridge Cleaner", asin: "B0FJ9PJF51" },
-            { name: "Ice Machine", asin: "B0FPPGJPW2" },
-            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ" },
-            { name: "Carpet Stain", asin: "B0GSCD23ZV" },
-            { name: "Pet Stain", asin: "B0GN5N37X4" }
+            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW", keywords: ['jetted'] },
+            { name: "Hot tub cleaner", asin: "B012GNCI44", keywords: ['hot tub', 'hottub'] },
+            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y", keywords: ['5 in 1', '5in1', 'weekly'] },
+            { name: "Fridge Cleaner", asin: "B0FJ9PJF51", keywords: ['fridge'] },
+            { name: "Ice Machine", asin: "B0FPPGJPW2", keywords: ['ice machine', 'icemachine'] },
+            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ", keywords: ['car seat', 'carseat'] },
+            { name: "Carpet Stain", asin: "B0GSCD23ZV", keywords: ['carpet'] },
+            { name: "Pet Stain", asin: "B0GN5N37X4", keywords: ['pet stain', 'pet'] }
           ];
 
-          // Build metrics by scanning rawRecords directly matching ASIN
           const getMetricsForProduct = (product) => {
             let spend = 0, sales = 0, orders = 0, ntbSales = 0, ntbOrders = 0;
             const targetAsin = product.asin;
+            const kws = product.keywords;
 
             rawRecords.forEach(row => {
+              const campName = (row.campaignName || '').toLowerCase();
               const rowAsin = row.asin || '';
-              // Pure ASIN matching
-              if (rowAsin === targetAsin || rowAsin.includes(targetAsin)) {
+              
+              const asinMatch = rowAsin === targetAsin || rowAsin.includes(targetAsin);
+              const kwMatch = kws.some(kw => campName.includes(kw));
+
+              if (asinMatch || kwMatch) {
                 spend += row.spend || 0;
                 sales += row.sales || 0;
                 orders += row.orders || 0;
@@ -3779,14 +3783,12 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             ws['!cols'] = [{ wch: 42 }, { wch: 28 }];
 
-            // Format ACOS cells as percentage
             exportAsins.forEach((_, idx) => {
               const acosRow = idx * 7 + 4;
               const cellRef = XLSX.utils.encode_cell({ r: acosRow, c: 1 });
               if (ws[cellRef]) ws[cellRef].z = '0.00%';
             });
 
-            // Format currency cells
             exportAsins.forEach((_, idx) => {
               const base = idx * 7;
               [base + 2, base + 3, base + 5].forEach(row => {
@@ -3802,22 +3804,8 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             const fileName = `Weekly_Report_${safeDateLabel}.xlsx`;
 
             try {
-              if (window.require) {
-                // We are in Electron, write directly to Downloads folder
-                const fs = window.require('fs');
-                const path = window.require('path');
-                const os = window.require('os');
-                
-                const downloadsPath = path.join(os.homedir(), 'Downloads');
-                const filePath = path.join(downloadsPath, fileName);
-                
-                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
-                fs.writeFileSync(filePath, wbout);
-                alert(`✅ Success!\n\nYour file has been saved to:\n${filePath}`);
-              } else {
-                // Web fallback
-                XLSX.writeFile(wb, fileName);
-              }
+              XLSX.writeFile(wb, fileName);
+              alert(`✅ Success!\n\nYour file "${fileName}" has been saved in the exact same folder where you opened this App (.exe) from.`);
             } catch (err) {
               alert('Error saving file: ' + err.message);
             }
@@ -3917,6 +3905,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             </div>
           );
         })()}
+
 
 
 
