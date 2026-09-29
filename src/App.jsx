@@ -3729,12 +3729,11 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             { name: "Pet Stain", asin: "B0GN5N37X4" }
           ];
 
-          const dataAgg = aggregateRecords(rawRecords);
-          const asinsList = dataAgg.asins || [];
+          const curAgg = dashboardData ? dashboardData.current : null;
+          const asinsList = curAgg ? curAgg.asins || [] : [];
 
           const getMetricsForAsin = (targetAsin) => {
             const found = asinsList.find(a => a.asin === targetAsin) || {};
-            // Business report sum (in case of multiple rows for same ASIN, though rare)
             const bRecords = businessRecords.filter(b => b.asin === targetAsin);
             const totalUnits = bRecords.reduce((sum, r) => sum + r.units, 0);
 
@@ -3748,99 +3747,142 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             };
           };
 
-          const handleCopyToClipboard = () => {
-            const clipboardData = [];
-            exportAsins.forEach((item, index) => {
-              const metrics = getMetricsForAsin(item.asin);
-              clipboardData.push(metrics.unitsSold);
-              clipboardData.push(metrics.spend.toFixed(2));
-              clipboardData.push(metrics.sales.toFixed(2));
-              clipboardData.push((metrics.acos / 100).toFixed(4));
-              clipboardData.push(metrics.ntbSales.toFixed(2));
-              clipboardData.push(metrics.ntbOrders);
-              
-              if (index < exportAsins.length - 1) {
-                clipboardData.push(""); // Empty row to skip the label of the next ASIN
-              }
+          const handleExportXlsx = () => {
+            const dateLabel = dateRangeInfo 
+              ? `${dateRangeInfo.min.toLocaleDateString('de-DE')} - ${dateRangeInfo.max.toLocaleDateString('de-DE')}`
+              : 'Current Period';
+
+            const wsData = [];
+            exportAsins.forEach((item) => {
+              const m = getMetricsForAsin(item.asin);
+              wsData.push([`${item.name} - ${item.asin}`, dateLabel]);
+              wsData.push(['Total Units Sold', m.unitsSold]);
+              wsData.push(['Ad Spend', m.spend]);
+              wsData.push(['Ad Sales', m.sales]);
+              wsData.push(['ACOS', m.acos > 0 ? m.acos / 100 : 0]);
+              wsData.push(['New to Brand Sales', m.ntbSales]);
+              wsData.push(['New to Brand Purchase', m.ntbOrders]);
             });
 
-            navigator.clipboard.writeText(clipboardData.join('\n'))
-              .then(() => alert('✅ Copied successfully! Go to Google Sheets, click the "Total Units Sold" cell for Jetted Tub Cleaner (e.g. B2), and Paste!'))
-              .catch(err => alert('Failed to copy: ', err));
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            ws['!cols'] = [{ wch: 42 }, { wch: 28 }];
+
+            exportAsins.forEach((_, idx) => {
+              const acosRow = idx * 7 + 4;
+              const cellRef = XLSX.utils.encode_cell({ r: acosRow, c: 1 });
+              if (ws[cellRef]) ws[cellRef].z = '0.00%';
+            });
+
+            exportAsins.forEach((_, idx) => {
+              const base = idx * 7;
+              [base + 2, base + 3, base + 5].forEach(row => {
+                const cellRef = XLSX.utils.encode_cell({ r: row, c: 1 });
+                if (ws[cellRef]) ws[cellRef].z = '#,##0.00';
+              });
+            });
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Weekly Report');
+            
+            const safeDateLabel = dateLabel.replace(/[/\\:*?"<>|]/g, '-');
+            XLSX.writeFile(wb, `Weekly_Report_${safeDateLabel}.xlsx`);
           };
+
+          const hasData = rawRecords.length > 0;
+          const hasBiz = businessRecords.length > 0;
 
           return (
             <div className="dashboard-container">
-              <div className="dashboard-header" style={{flexDirection: 'column', alignItems: 'flex-start'}}>
-                <div>
-                  <h1 className="dashboard-title">
-                    <Copy size={28} color="#10b981" style={{verticalAlign:'middle',marginRight:'0.5rem'}} />
+              <div style={{maxWidth: '900px', margin: '0 auto'}}>
+                <div style={{marginBottom: '2rem'}}>
+                  <h1 className="dashboard-title" style={{fontSize: '1.4rem', marginBottom: '0.5rem'}}>
+                    <FileSpreadsheet size={24} color="#10b981" style={{verticalAlign:'middle',marginRight:'0.5rem'}} />
                     Weekly Sheet Exporter
                   </h1>
-                  <p className="date-span-subtitle" style={{marginTop: '0.25rem'}}>
-                    Generates the exact vertical column structure for your Google Sheet.
+                  <p style={{color: 'var(--text-secondary)', fontSize: '0.85rem'}}>
+                    Upload Campaign Report + Business Report, then download the formatted Excel file.
                   </p>
                 </div>
-                
-                <div style={{marginTop: '1.5rem', width: '100%', display: 'flex', gap: '1rem', alignItems: 'flex-start'}}>
-                  {/* Instructions Panel */}
-                  <div style={{flex: 1, background: 'var(--bg-tertiary)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'}}>
-                    <h3 style={{marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)'}}>
-                      <Info size={18} /> How to use
-                    </h3>
-                    <ol style={{paddingLeft: '1.25rem', color: 'var(--text-secondary)', lineHeight: 1.6}}>
-                      <li>Ensure you have uploaded both your <b>Campaign Report</b> and <b>Business Report</b>.</li>
-                      <li>Filter the date range you want to export using the top right calendar menu.</li>
-                      <li>Click the big green Copy button.</li>
-                      <li>In your Google Sheet, click the <b>Total Units Sold</b> cell for the very first product (Jetted Tub Cleaner) and Paste (Ctrl+V).</li>
-                    </ol>
-                    <button 
-                      onClick={handleCopyToClipboard}
-                      className="tab-btn active" 
-                      style={{background: '#10b981', color: 'white', marginTop: '1.5rem', width: '100%', justifyContent: 'center', padding: '0.75rem', fontSize: '1.1rem'}}
-                    >
-                      <Copy size={20} /> Copy Entire Column to Clipboard
-                    </button>
-                  </div>
 
-                  {/* Preview Panel */}
-                  <div style={{flex: 2, background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', maxHeight: '600px', overflowY: 'auto'}}>
-                    <h3 style={{marginBottom: '1rem', color: 'var(--text-primary)'}}>Data Preview</h3>
-                    <table className="campaign-table" style={{background: 'transparent'}}>
-                      <thead>
-                        <tr>
-                          <th>Product</th>
-                          <th className="text-right">Units Sold</th>
-                          <th className="text-right">Ad Spend</th>
-                          <th className="text-right">Ad Sales</th>
-                          <th className="text-right">ACoS</th>
-                          <th className="text-right">NTB Sales</th>
-                          <th className="text-right">NTB Orders</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {exportAsins.map((item, idx) => {
-                          const m = getMetricsForAsin(item.asin);
-                          return (
-                            <tr key={idx} style={{background: 'transparent'}}>
-                              <td style={{fontWeight: 600, color: 'var(--accent-color)'}}>{item.name}</td>
-                              <td className="text-right">{m.unitsSold}</td>
-                              <td className="text-right">{formatCurrency(m.spend)}</td>
-                              <td className="text-right">{formatCurrency(m.sales)}</td>
-                              <td className="text-right">{formatPercent(m.acos)}</td>
-                              <td className="text-right">{formatCurrency(m.ntbSales)}</td>
-                              <td className="text-right">{m.ntbOrders}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem',
+                  padding: '1.25rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  <span style={{
+                    padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 600,
+                    background: hasData ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                    color: hasData ? '#10b981' : '#ef4444'
+                  }}>
+                    {hasData ? '✓' : '✗'} Campaign
+                  </span>
+                  <span style={{
+                    padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 600,
+                    background: hasBiz ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                    color: hasBiz ? '#10b981' : '#ef4444'
+                  }}>
+                    {hasBiz ? '✓' : '✗'} Business
+                  </span>
+                  <div style={{flex: 1}} />
+                  <button 
+                    onClick={handleExportXlsx}
+                    disabled={!hasData}
+                    style={{
+                      padding: '0.7rem 1.5rem', fontSize: '0.95rem', fontWeight: 700,
+                      background: hasData ? '#10b981' : '#333', color: '#fff', border: 'none',
+                      borderRadius: 'var(--radius-md)', cursor: hasData ? 'pointer' : 'not-allowed',
+                      display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: hasData ? 1 : 0.5
+                    }}
+                  >
+                    <FileSpreadsheet size={18} /> Download .xlsx
+                  </button>
+                </div>
+
+                <div style={{
+                  background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)', overflow: 'hidden'
+                }}>
+                  <table className="campaign-table" style={{background: 'transparent', margin: 0}}>
+                    <thead>
+                      <tr>
+                        <th style={{width: '200px'}}>Product</th>
+                        <th className="text-right">Units Sold</th>
+                        <th className="text-right">Ad Spend</th>
+                        <th className="text-right">Ad Sales</th>
+                        <th className="text-right">ACoS</th>
+                        <th className="text-right">NTB Sales</th>
+                        <th className="text-right">NTB Purchases</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exportAsins.map((item, idx) => {
+                        const m = getMetricsForAsin(item.asin);
+                        const acosColor = m.acos > 30 ? '#ef4444' : m.acos > 0 ? '#10b981' : 'var(--text-secondary)';
+                        return (
+                          <tr key={idx}>
+                            <td>
+                              <div style={{fontWeight: 600, color: 'var(--text-primary)'}}>{item.name}</div>
+                              <div style={{fontSize: '0.7rem', color: 'var(--text-tertiary)', fontFamily: 'monospace'}}>{item.asin}</div>
+                            </td>
+                            <td className="text-right" style={{fontWeight: 600}}>{m.unitsSold || '—'}</td>
+                            <td className="text-right">{m.spend > 0 ? formatCurrency(m.spend) : '—'}</td>
+                            <td className="text-right">{m.sales > 0 ? formatCurrency(m.sales) : '—'}</td>
+                            <td className="text-right" style={{color: acosColor, fontWeight: 600}}>
+                              {m.acos > 0 ? formatPercent(m.acos) : '—'}
+                            </td>
+                            <td className="text-right">{m.ntbSales > 0 ? formatCurrency(m.ntbSales) : '—'}</td>
+                            <td className="text-right">{m.ntbOrders > 0 ? m.ntbOrders : '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           );
         })()}
+
         {activeTab === 'admin' && (() => {
           const typeLabels = { ui: '🎨 UI/UX', bug: '🐛 Bug', perf: '⚡ Performance', feature: '💡 Feature', other: '📝 Other' };
           const openItems = feedbacks.filter(f => f.status === 'open');
