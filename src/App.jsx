@@ -3723,42 +3723,56 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
         {/* TAB 9: SHEET EXPORTER */}
         {activeTab === 'sheet_exporter' && (() => {
           const exportAsins = [
-            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW" },
-            { name: "Hot tub cleaner", asin: "B012GNCI44" },
-            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y" },
-            { name: "Fridge Cleaner", asin: "B0FJ9PJF51" },
-            { name: "Ice Machine", asin: "B0FPPGJPW2" },
-            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ" },
-            { name: "Carpet Stain", asin: "B0GSCD23ZV" },
-            { name: "Pet Stain", asin: "B0GN5N37X4" }
+            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW", keywords: ['jetted', 'jetted tub', 'jettedtub'] },
+            { name: "Hot tub cleaner", asin: "B012GNCI44", keywords: ['hot tub', 'hottub'] },
+            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y", keywords: ['5 in 1', '5in1', 'weekly'] },
+            { name: "Fridge Cleaner", asin: "B0FJ9PJF51", keywords: ['fridge', 'refrigerator'] },
+            { name: "Ice Machine", asin: "B0FPPGJPW2", keywords: ['ice machine', 'icemachine', 'ice maker'] },
+            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ", keywords: ['car seat', 'carseat', 'kids car'] },
+            { name: "Carpet Stain", asin: "B0GSCD23ZV", keywords: ['carpet'] },
+            { name: "Pet Stain", asin: "B0GN5N37X4", keywords: ['pet stain', 'pet'] }
           ];
 
-          const curAgg = dashboardData ? dashboardData.current : null;
-          const asinsList = curAgg ? curAgg.asins || [] : [];
+          // Build metrics by scanning rawRecords directly with keyword + ASIN matching
+          const getMetricsForProduct = (product) => {
+            let spend = 0, sales = 0, orders = 0, ntbSales = 0, ntbOrders = 0;
+            const targetAsin = product.asin;
+            const kws = product.keywords;
 
-          const getMetricsForAsin = (targetAsin) => {
-            const found = asinsList.find(a => a.asin === targetAsin) || {};
+            rawRecords.forEach(row => {
+              const campName = (row.campaignName || '').toLowerCase();
+              const rowAsin = row.asin || '';
+              
+              // Match by ASIN (from column or campaign name extraction) OR by keyword in campaign name
+              const asinMatch = rowAsin === targetAsin;
+              const kwMatch = kws.some(kw => campName.includes(kw));
+              
+              if (asinMatch || kwMatch) {
+                spend += row.spend || 0;
+                sales += row.sales || 0;
+                orders += row.orders || 0;
+                ntbSales += row.ntbSales || 0;
+                ntbOrders += row.ntbOrders || 0;
+              }
+            });
+
+            // Business report units
             const bRecords = businessRecords.filter(b => b.asin === targetAsin);
-            const totalUnits = bRecords.reduce((sum, r) => sum + r.units, 0);
+            const unitsSold = bRecords.reduce((sum, r) => sum + r.units, 0);
 
-            return {
-              unitsSold: totalUnits,
-              spend: found.totalSpend || 0,
-              sales: found.totalSales || 0,
-              acos: found.acos || 0,
-              ntbSales: found.totalNtbSales || 0,
-              ntbOrders: found.totalNtbOrders || 0
-            };
+            const acos = sales > 0 ? (spend / sales) * 100 : 0;
+
+            return { unitsSold, spend, sales, acos, ntbSales, ntbOrders };
           };
 
           const handleExportXlsx = () => {
             const dateLabel = dateRangeInfo 
               ? `${dateRangeInfo.min.toLocaleDateString('de-DE')} - ${dateRangeInfo.max.toLocaleDateString('de-DE')}`
-              : 'Current Period';
+              : new Date().toISOString().slice(0, 10);
 
             const wsData = [];
             exportAsins.forEach((item) => {
-              const m = getMetricsForAsin(item.asin);
+              const m = getMetricsForProduct(item);
               wsData.push([`${item.name} - ${item.asin}`, dateLabel]);
               wsData.push(['Total Units Sold', m.unitsSold]);
               wsData.push(['Ad Spend', m.spend]);
@@ -3771,12 +3785,14 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             ws['!cols'] = [{ wch: 42 }, { wch: 28 }];
 
+            // Format ACOS cells as percentage
             exportAsins.forEach((_, idx) => {
               const acosRow = idx * 7 + 4;
               const cellRef = XLSX.utils.encode_cell({ r: acosRow, c: 1 });
               if (ws[cellRef]) ws[cellRef].z = '0.00%';
             });
 
+            // Format currency cells
             exportAsins.forEach((_, idx) => {
               const base = idx * 7;
               [base + 2, base + 3, base + 5].forEach(row => {
@@ -3789,18 +3805,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             XLSX.utils.book_append_sheet(wb, ws, 'Weekly Report');
             
             const safeDateLabel = dateLabel.replace(/[/\\:*?"<>|]/g, '-');
-            
-            // Use Blob-based download (works in Electron)
-            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            const blob = new Blob([wbout], { type: 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Weekly_Report_${safeDateLabel}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            XLSX.writeFile(wb, `Weekly_Report_${safeDateLabel}.xlsx`);
           };
 
           const hasData = rawRecords.length > 0;
@@ -3871,7 +3876,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                     </thead>
                     <tbody>
                       {exportAsins.map((item, idx) => {
-                        const m = getMetricsForAsin(item.asin);
+                        const m = getMetricsForProduct(item);
                         const acosColor = m.acos > 30 ? '#ef4444' : m.acos > 0 ? '#10b981' : 'var(--text-secondary)';
                         return (
                           <tr key={idx}>
@@ -3897,6 +3902,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             </div>
           );
         })()}
+
 
         {activeTab === 'admin' && (() => {
           const typeLabels = { ui: '🎨 UI/UX', bug: '🐛 Bug', perf: '⚡ Performance', feature: '💡 Feature', other: '📝 Other' };
