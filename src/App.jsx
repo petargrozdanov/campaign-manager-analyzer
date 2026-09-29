@@ -1076,7 +1076,11 @@ function App() {
         if (!maxDate || time > maxDate.getTime()) maxDate = parsedDate;
       }
 
-      const asin = extractASIN(campaignName);
+      // Try explicit ASIN column first, then fall back to extracting from campaign name
+      const explicitAsin = getVal(row, ['advertisedasin', 'asin', '(child)asin', 'childasin', 'advertisedsku']);
+      const asin = (explicitAsin && /^B0[A-Z0-9]{8}$/i.test(String(explicitAsin).trim())) 
+        ? String(explicitAsin).trim().toUpperCase() 
+        : extractASIN(campaignName);
       if (asin && asin !== 'Unknown') discoveredAsins.add(asin);
 
       const spend = parseCurrency(getVal(row, ['spend', 'cost', 'totalcost', 'inversion', 'inversión', 'gasto', 'ausgaben', 'dépenses', 'spesa']));
@@ -3785,7 +3789,18 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             XLSX.utils.book_append_sheet(wb, ws, 'Weekly Report');
             
             const safeDateLabel = dateLabel.replace(/[/\\:*?"<>|]/g, '-');
-            XLSX.writeFile(wb, `Weekly_Report_${safeDateLabel}.xlsx`);
+            
+            // Use Blob-based download (works in Electron)
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Weekly_Report_${safeDateLabel}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
           };
 
           const hasData = rawRecords.length > 0;
