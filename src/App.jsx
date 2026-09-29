@@ -1089,8 +1089,8 @@ function App() {
       const clicks = parseInt(getVal(row, ['click', 'clic'])) || 0;
       const orders = parseInt(getVal(row, ['order', 'pedido', 'purchase', 'purchases'])) || 0;
       const budget = parseCurrency(getVal(row, ['budget', 'presupuesto']));
-      const ntbSales = parseCurrency(getVal(row, ['new-to-brandsales', 'newtobrandsales']));
-      const ntbOrders = parseInt(getVal(row, ['new-to-brandorders', 'newtobrandsorders', 'new-to-brandpurchases', 'newtobrandsoucheses'])) || 0;
+      const ntbSales = parseCurrency(getVal(row, ['sales(newtobrand)', 'newtobrandsales', 'new-to-brandsales']));
+      const ntbOrders = parseInt(getVal(row, ['purchases(newtobrand)', 'newtobrandpurchases', 'new-to-brandorders', 'newtobrandsorders'])) || 0;
 
       normalized.push({
         campaignName,
@@ -3723,31 +3723,25 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
         {/* TAB 9: SHEET EXPORTER */}
         {activeTab === 'sheet_exporter' && (() => {
           const exportAsins = [
-            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW", keywords: ['jetted', 'jetted tub', 'jettedtub'] },
-            { name: "Hot tub cleaner", asin: "B012GNCI44", keywords: ['hot tub', 'hottub'] },
-            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y", keywords: ['5 in 1', '5in1', 'weekly'] },
-            { name: "Fridge Cleaner", asin: "B0FJ9PJF51", keywords: ['fridge', 'refrigerator'] },
-            { name: "Ice Machine", asin: "B0FPPGJPW2", keywords: ['ice machine', 'icemachine', 'ice maker'] },
-            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ", keywords: ['car seat', 'carseat', 'kids car'] },
-            { name: "Carpet Stain", asin: "B0GSCD23ZV", keywords: ['carpet'] },
-            { name: "Pet Stain", asin: "B0GN5N37X4", keywords: ['pet stain', 'pet'] }
+            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW" },
+            { name: "Hot tub cleaner", asin: "B012GNCI44" },
+            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y" },
+            { name: "Fridge Cleaner", asin: "B0FJ9PJF51" },
+            { name: "Ice Machine", asin: "B0FPPGJPW2" },
+            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ" },
+            { name: "Carpet Stain", asin: "B0GSCD23ZV" },
+            { name: "Pet Stain", asin: "B0GN5N37X4" }
           ];
 
-          // Build metrics by scanning rawRecords directly with keyword + ASIN matching
+          // Build metrics by scanning rawRecords directly matching ASIN
           const getMetricsForProduct = (product) => {
             let spend = 0, sales = 0, orders = 0, ntbSales = 0, ntbOrders = 0;
             const targetAsin = product.asin;
-            const kws = product.keywords;
 
             rawRecords.forEach(row => {
-              const campName = (row.campaignName || '').toLowerCase();
               const rowAsin = row.asin || '';
-              
-              // Match by ASIN (from column or campaign name extraction) OR by keyword in campaign name
-              const asinMatch = rowAsin === targetAsin;
-              const kwMatch = kws.some(kw => campName.includes(kw));
-              
-              if (asinMatch || kwMatch) {
+              // Pure ASIN matching
+              if (rowAsin === targetAsin || rowAsin.includes(targetAsin)) {
                 spend += row.spend || 0;
                 sales += row.sales || 0;
                 orders += row.orders || 0;
@@ -3757,7 +3751,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             });
 
             // Business report units
-            const bRecords = businessRecords.filter(b => b.asin === targetAsin);
+            const bRecords = businessRecords.filter(b => b.asin === targetAsin || (b.asin && b.asin.includes(targetAsin)));
             const unitsSold = bRecords.reduce((sum, r) => sum + r.units, 0);
 
             const acos = sales > 0 ? (spend / sales) * 100 : 0;
@@ -3805,7 +3799,28 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             XLSX.utils.book_append_sheet(wb, ws, 'Weekly Report');
             
             const safeDateLabel = dateLabel.replace(/[/\\:*?"<>|]/g, '-');
-            XLSX.writeFile(wb, `Weekly_Report_${safeDateLabel}.xlsx`);
+            const fileName = `Weekly_Report_${safeDateLabel}.xlsx`;
+
+            try {
+              if (window.require) {
+                // We are in Electron, write directly to Downloads folder
+                const fs = window.require('fs');
+                const path = window.require('path');
+                const os = window.require('os');
+                
+                const downloadsPath = path.join(os.homedir(), 'Downloads');
+                const filePath = path.join(downloadsPath, fileName);
+                
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+                fs.writeFileSync(filePath, wbout);
+                alert(`✅ Success!\n\nYour file has been saved to:\n${filePath}`);
+              } else {
+                // Web fallback
+                XLSX.writeFile(wb, fileName);
+              }
+            } catch (err) {
+              alert('Error saving file: ' + err.message);
+            }
           };
 
           const hasData = rawRecords.length > 0;
@@ -3902,6 +3917,7 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             </div>
           );
         })()}
+
 
 
         {activeTab === 'admin' && (() => {
