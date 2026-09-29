@@ -686,6 +686,7 @@ const generateOverallComparativeSummary = (aggA, aggB, asinReports, globalStrate
 function App() {
   const [activeTab, setActiveTab] = useState('upload'); // 'upload', 'dashboard', 'history', 'compare', 'ai_strategy'
   const [rawRecords, setRawRecords] = useState([]);
+  const [businessRecords, setBusinessRecords] = useState([]);
   const [hasDates, setHasDates] = useState(false);
   const [dateRangeInfo, setDateRangeInfo] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('all');
@@ -919,20 +920,50 @@ function App() {
     }
   };
 
-  const processFile = (file) => {
+  const ingestBusinessData = (dataRows) => {
+    const normalized = [];
+    dataRows.forEach(rawRow => {
+      const row = {};
+      Object.keys(rawRow).forEach(key => {
+        if (key) {
+          row[key.toLowerCase().trim().replace(/\s+/g, '')] = rawRow[key];
+        }
+      });
+
+      const asin = row['(child)asin'] || row['childasin'] || row['asin'] || row['(parent)asin'] || row['parentasin'];
+      if (!asin) return;
+      
+      const units = parseInt(row['unitsordered'] || row['totalorderitems'] || row['units'] || row['orderedproductsales']) || 0;
+      
+      normalized.push({
+        asin: asin.toUpperCase(),
+        units
+      });
+    });
+    setBusinessRecords(normalized);
+  };
+
+  const processFile = (file, fileType = 'campaign') => {
     if (!file) return;
     setLoading(true);
-    setFileName(file.name);
-    setBulkActions({});
+    if (fileType === 'campaign' || fileType === 'bulk') {
+      setFileName(file.name);
+      setBulkActions({});
+    }
     
     const fileExtension = file.name.split('.').pop().toLowerCase();
 
     const onDataReady = (data) => {
       try {
-        ingestData(data, file.name);
-        const fnDateRange = extractDateRangeFromFilename(file.name);
-        if (fnDateRange) autoMatchPreviousSnapshot(fnDateRange);
-        setActiveTab('dashboard');
+        if (fileType === 'business') {
+          ingestBusinessData(data);
+          alert('Business Report uploaded successfully! Go to the Sheet Exporter tab to copy your data.');
+        } else {
+          ingestData(data, file.name);
+          const fnDateRange = extractDateRangeFromFilename(file.name);
+          if (fnDateRange) autoMatchPreviousSnapshot(fnDateRange);
+          setActiveTab('dashboard');
+        }
       } catch (err) {
         console.error('Data ingestion failed:', err);
         alert('Error processing file data. Please check the file format.');
@@ -960,24 +991,28 @@ function App() {
           
           let json = [];
           
-          // Look for Amazon-specific sheets (Bulk Operations or Search Term Reports)
-          const targetSheets = workbook.SheetNames.filter(name => 
-            name.toLowerCase().includes('sponsored products campaigns') ||
-            name.toLowerCase().includes('sp campaigns') ||
-            name.toLowerCase().includes('search term report')
-          );
-
-          if (targetSheets.length > 0) {
-            // Process the specific sheets
-            targetSheets.forEach(sheetName => {
-              const worksheet = workbook.Sheets[sheetName];
-              json = json.concat(XLSX.utils.sheet_to_json(worksheet));
-            });
-          } else {
-            // Fallback: Use the first sheet that isn't 'Portfolios'
-            const dataSheetName = workbook.SheetNames.find(n => !n.toLowerCase().includes('portfolio')) || workbook.SheetNames[0];
+          if (fileType === 'business') {
+            const dataSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[dataSheetName];
             json = XLSX.utils.sheet_to_json(worksheet);
+          } else {
+            // Look for Amazon-specific sheets (Bulk Operations or Search Term Reports)
+            const targetSheets = workbook.SheetNames.filter(name => 
+              name.toLowerCase().includes('sponsored products campaigns') ||
+              name.toLowerCase().includes('sp campaigns') ||
+              name.toLowerCase().includes('search term report')
+            );
+
+            if (targetSheets.length > 0) {
+              targetSheets.forEach(sheetName => {
+                const worksheet = workbook.Sheets[sheetName];
+                json = json.concat(XLSX.utils.sheet_to_json(worksheet));
+              });
+            } else {
+              const dataSheetName = workbook.SheetNames.find(n => !n.toLowerCase().includes('portfolio')) || workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[dataSheetName];
+              json = XLSX.utils.sheet_to_json(worksheet);
+            }
           }
           
           onDataReady(json);
@@ -998,8 +1033,8 @@ function App() {
     }
   };
 
-  const handleFileUpload = (event) => {
-    processFile(event.target.files[0]);
+  const handleFileUpload = (event, type = 'campaign') => {
+    processFile(event.target.files[0], type);
   };
 
   // Drag-and-drop handlers
@@ -1050,6 +1085,8 @@ function App() {
       const clicks = parseInt(getVal(row, ['click', 'clic'])) || 0;
       const orders = parseInt(getVal(row, ['order', 'pedido', 'purchase', 'purchases'])) || 0;
       const budget = parseCurrency(getVal(row, ['budget', 'presupuesto']));
+      const ntbSales = parseCurrency(getVal(row, ['new-to-brandsales', 'newtobrandsales']));
+      const ntbOrders = parseInt(getVal(row, ['new-to-brandorders', 'newtobrandsorders', 'new-to-brandpurchases', 'newtobrandsoucheses'])) || 0;
 
       normalized.push({
         campaignName,
@@ -1060,7 +1097,10 @@ function App() {
         impressions,
         clicks,
         orders,
-        budget
+        ntbSales,
+        ntbOrders,
+        budget,
+        originalRow: rawRow
       });
     });
 
@@ -1207,6 +1247,8 @@ function App() {
           totalOrders: 0,
           totalClicks: 0,
           totalImpressions: 0,
+          totalNtbSales: 0,
+          totalNtbOrders: 0,
           campaignMap: {}
         };
       }
@@ -1216,6 +1258,8 @@ function App() {
       grouped[asin].totalOrders += row.orders;
       grouped[asin].totalClicks += row.clicks;
       grouped[asin].totalImpressions += row.impressions;
+      grouped[asin].totalNtbSales += row.ntbSales || 0;
+      grouped[asin].totalNtbOrders += row.ntbOrders || 0;
 
       if (!grouped[asin].campaignMap[row.campaignName]) {
         grouped[asin].campaignMap[row.campaignName] = {
@@ -1225,6 +1269,8 @@ function App() {
           impressions: 0,
           clicks: 0,
           orders: 0,
+          ntbSales: 0,
+          ntbOrders: 0,
           budget: row.budget,
           isEasyWin: isEasyWin(row.campaignName)
         };
@@ -1236,6 +1282,8 @@ function App() {
       camp.impressions += row.impressions;
       camp.clicks += row.clicks;
       camp.orders += row.orders;
+      camp.ntbSales += row.ntbSales || 0;
+      camp.ntbOrders += row.ntbOrders || 0;
       if (row.budget > camp.budget) camp.budget = row.budget;
     });
 
@@ -2113,6 +2161,15 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
             <Target size={18} />
             PESH Optimizer
           </button>
+
+          <button 
+            className={`tab-btn ${activeTab === 'sheet_exporter' ? 'active' : ''}`}
+            onClick={() => setActiveTab('sheet_exporter')}
+            style={{ color: activeTab === 'sheet_exporter' ? '#10b981' : '' }}
+          >
+            <Copy size={18} />
+            Sheet Exporter
+          </button>
           <button 
             className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
             onClick={() => setActiveTab('admin')}
@@ -2144,15 +2201,15 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
       <main className="tab-content">
         {/* TAB 1: UPLOAD */}
         {activeTab === 'upload' && (
-          <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '1.5rem auto', maxWidth: '850px', width: '100%'}}>
-            <div style={{display: 'flex', gap: '1.5rem', width: '100%', alignItems: 'stretch'}}>
+          <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '1.5rem auto', maxWidth: '1000px', width: '100%'}}>
+            <div style={{display: 'flex', gap: '1rem', width: '100%', alignItems: 'stretch'}}>
               {/* Standard Report Upload */}
               <div 
                 className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${loading ? 'processing' : ''}`}
-                style={{flex: 1, margin: 0, padding: '2.5rem 1.5rem'}}
+                style={{flex: 1, margin: 0, padding: '2.5rem 1rem'}}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); if (e.dataTransfer?.files?.[0]) processFile(e.dataTransfer.files[0], 'campaign'); }}
               >
                 <FileSpreadsheet size={42} className="upload-icon" />
                 <h2 style={{fontSize: '1.15rem', marginBottom: '0.5rem', color: 'var(--text-primary)'}}>Campaign Report</h2>
@@ -2164,9 +2221,9 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                   {loading ? 'Processing...' : 'Upload Report'}
                   <input 
                     type="file" 
-                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                    accept=".csv, .xlsx" 
                     className="file-input" 
-                    onChange={handleFileUpload}
+                    onChange={(e) => handleFileUpload(e, 'campaign')}
                     disabled={loading}
                   />
                 </label>
@@ -2175,10 +2232,10 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
               {/* Bulk File Upload */}
               <div 
                 className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${loading ? 'processing' : ''}`}
-                style={{flex: 1, margin: 0, padding: '2.5rem 1.5rem', borderColor: 'rgba(168, 85, 247, 0.4)'}}
+                style={{flex: 1, margin: 0, padding: '2.5rem 1rem', borderColor: 'rgba(168, 85, 247, 0.4)'}}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); if (e.dataTransfer?.files?.[0]) processFile(e.dataTransfer.files[0], 'bulk'); }}
               >
                 <Target size={42} style={{color: 'var(--purple)', marginBottom: '1rem'}} />
                 <h2 style={{fontSize: '1.15rem', marginBottom: '0.5rem', color: 'var(--text-primary)'}}>Bulk Operations File</h2>
@@ -2190,9 +2247,35 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
                   {loading ? 'Processing...' : 'Upload Bulk File'}
                   <input 
                     type="file" 
-                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                    accept=".csv, .xlsx" 
                     className="file-input" 
-                    onChange={handleFileUpload}
+                    onChange={(e) => handleFileUpload(e, 'bulk')}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
+
+              {/* Business Report Upload */}
+              <div 
+                className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${loading ? 'processing' : ''}`}
+                style={{flex: 1, margin: 0, padding: '2.5rem 1rem', borderColor: 'rgba(16, 185, 129, 0.4)'}}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); if (e.dataTransfer?.files?.[0]) processFile(e.dataTransfer.files[0], 'business'); }}
+              >
+                <BarChart2 size={42} style={{color: '#10b981', marginBottom: '1rem'}} />
+                <h2 style={{fontSize: '1.15rem', marginBottom: '0.5rem', color: 'var(--text-primary)'}}>Business Report</h2>
+                <p className="upload-subtitle" style={{fontSize: '0.85rem', marginBottom: '1.5rem'}}>
+                  For the <b>Sheet Exporter</b> to pull Total Units Sold.
+                </p>
+                
+                <label className="upload-button" style={{backgroundColor: '#10b981', color: '#fff'}}>
+                  {loading ? 'Processing...' : 'Upload Business Report'}
+                  <input 
+                    type="file" 
+                    accept=".csv, .xlsx" 
+                    className="file-input" 
+                    onChange={(e) => handleFileUpload(e, 'business')}
                     disabled={loading}
                   />
                 </label>
@@ -3633,8 +3716,131 @@ ${report.actionDirectives.map((act, i) => `   ${i + 1}. ${act}`).join('\n')}
           </div>
         )}
 
+        {/* TAB 9: SHEET EXPORTER */}
+        {activeTab === 'sheet_exporter' && (() => {
+          const exportAsins = [
+            { name: "Jetted Tub Cleaner", asin: "B0GTMV4KMW" },
+            { name: "Hot tub cleaner", asin: "B012GNCI44" },
+            { name: "5 in 1 Weekly", asin: "B0F77LYS9Y" },
+            { name: "Fridge Cleaner", asin: "B0FJ9PJF51" },
+            { name: "Ice Machine", asin: "B0FPPGJPW2" },
+            { name: "Kids Car Seat", asin: "B0H8F9ZSBJ" },
+            { name: "Carpet Stain", asin: "B0GSCD23ZV" },
+            { name: "Pet Stain", asin: "B0GN5N37X4" }
+          ];
 
-        {/* TAB 7: ADMIN PANEL */}
+          const dataAgg = aggregateRecords(rawRecords);
+          const asinsList = dataAgg.asins || [];
+
+          const getMetricsForAsin = (targetAsin) => {
+            const found = asinsList.find(a => a.asin === targetAsin) || {};
+            // Business report sum (in case of multiple rows for same ASIN, though rare)
+            const bRecords = businessRecords.filter(b => b.asin === targetAsin);
+            const totalUnits = bRecords.reduce((sum, r) => sum + r.units, 0);
+
+            return {
+              unitsSold: totalUnits,
+              spend: found.totalSpend || 0,
+              sales: found.totalSales || 0,
+              acos: found.acos || 0,
+              ntbSales: found.totalNtbSales || 0,
+              ntbOrders: found.totalNtbOrders || 0
+            };
+          };
+
+          const handleCopyToClipboard = () => {
+            const clipboardData = [];
+            exportAsins.forEach((item, index) => {
+              const metrics = getMetricsForAsin(item.asin);
+              clipboardData.push(metrics.unitsSold);
+              clipboardData.push(metrics.spend.toFixed(2));
+              clipboardData.push(metrics.sales.toFixed(2));
+              clipboardData.push((metrics.acos / 100).toFixed(4));
+              clipboardData.push(metrics.ntbSales.toFixed(2));
+              clipboardData.push(metrics.ntbOrders);
+              
+              if (index < exportAsins.length - 1) {
+                clipboardData.push(""); // Empty row to skip the label of the next ASIN
+              }
+            });
+
+            navigator.clipboard.writeText(clipboardData.join('\n'))
+              .then(() => alert('✅ Copied successfully! Go to Google Sheets, click the "Total Units Sold" cell for Jetted Tub Cleaner (e.g. B2), and Paste!'))
+              .catch(err => alert('Failed to copy: ', err));
+          };
+
+          return (
+            <div className="dashboard-container">
+              <div className="dashboard-header" style={{flexDirection: 'column', alignItems: 'flex-start'}}>
+                <div>
+                  <h1 className="dashboard-title">
+                    <Copy size={28} color="#10b981" style={{verticalAlign:'middle',marginRight:'0.5rem'}} />
+                    Weekly Sheet Exporter
+                  </h1>
+                  <p className="date-span-subtitle" style={{marginTop: '0.25rem'}}>
+                    Generates the exact vertical column structure for your Google Sheet.
+                  </p>
+                </div>
+                
+                <div style={{marginTop: '1.5rem', width: '100%', display: 'flex', gap: '1rem', alignItems: 'flex-start'}}>
+                  {/* Instructions Panel */}
+                  <div style={{flex: 1, background: 'var(--bg-tertiary)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'}}>
+                    <h3 style={{marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)'}}>
+                      <Info size={18} /> How to use
+                    </h3>
+                    <ol style={{paddingLeft: '1.25rem', color: 'var(--text-secondary)', lineHeight: 1.6}}>
+                      <li>Ensure you have uploaded both your <b>Campaign Report</b> and <b>Business Report</b>.</li>
+                      <li>Filter the date range you want to export using the top right calendar menu.</li>
+                      <li>Click the big green Copy button.</li>
+                      <li>In your Google Sheet, click the <b>Total Units Sold</b> cell for the very first product (Jetted Tub Cleaner) and Paste (Ctrl+V).</li>
+                    </ol>
+                    <button 
+                      onClick={handleCopyToClipboard}
+                      className="tab-btn active" 
+                      style={{background: '#10b981', color: 'white', marginTop: '1.5rem', width: '100%', justifyContent: 'center', padding: '0.75rem', fontSize: '1.1rem'}}
+                    >
+                      <Copy size={20} /> Copy Entire Column to Clipboard
+                    </button>
+                  </div>
+
+                  {/* Preview Panel */}
+                  <div style={{flex: 2, background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', maxHeight: '600px', overflowY: 'auto'}}>
+                    <h3 style={{marginBottom: '1rem', color: 'var(--text-primary)'}}>Data Preview</h3>
+                    <table className="campaign-table" style={{background: 'transparent'}}>
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th className="text-right">Units Sold</th>
+                          <th className="text-right">Ad Spend</th>
+                          <th className="text-right">Ad Sales</th>
+                          <th className="text-right">ACoS</th>
+                          <th className="text-right">NTB Sales</th>
+                          <th className="text-right">NTB Orders</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {exportAsins.map((item, idx) => {
+                          const m = getMetricsForAsin(item.asin);
+                          return (
+                            <tr key={idx} style={{background: 'transparent'}}>
+                              <td style={{fontWeight: 600, color: 'var(--accent-color)'}}>{item.name}</td>
+                              <td className="text-right">{m.unitsSold}</td>
+                              <td className="text-right">{formatCurrency(m.spend)}</td>
+                              <td className="text-right">{formatCurrency(m.sales)}</td>
+                              <td className="text-right">{formatPercent(m.acos)}</td>
+                              <td className="text-right">{formatCurrency(m.ntbSales)}</td>
+                              <td className="text-right">{m.ntbOrders}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         {activeTab === 'admin' && (() => {
           const typeLabels = { ui: '🎨 UI/UX', bug: '🐛 Bug', perf: '⚡ Performance', feature: '💡 Feature', other: '📝 Other' };
           const openItems = feedbacks.filter(f => f.status === 'open');
